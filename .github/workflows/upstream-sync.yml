@@ -55,6 +55,12 @@ jobs:
           else
             echo "Installing latest gh CLI (no sudo)..."
             GH_VERSION=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
+            if [ -z "$GH_VERSION" ]; then
+              echo "::error::Failed to extract gh CLI version from GitHub API response."
+              echo "The GitHub releases API may have changed format or be temporarily unavailable."
+              echo "Manual fix: install gh CLI on the runner, or set GH_VERSION manually."
+              exit 1
+            fi
             echo "Latest version: $GH_VERSION"
             curl -fsSL -L "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
               -o /tmp/gh.tar.gz
@@ -373,19 +379,38 @@ jobs:
           } > /tmp/pr_body.md
 
           # Create PR on fork repo (gh defaults to parent for forks)
-          PR_URL=$(gh pr create \
+          PR_TITLE="Upstream sync: CCA ${SHORT_SHA} (${COMMIT_COUNT} commits)"
+          PR_URL=""
+          FIRST_ATTEMPT_OUTPUT=""
+
+          # First attempt: with --label flag (may fail if label doesn't exist)
+          FIRST_ATTEMPT_OUTPUT=$(gh pr create \
             -R "${{ github.repository }}" \
             --base vibectl-main \
             --head "$SYNC_BRANCH" \
-            --title "Upstream sync: CCA ${SHORT_SHA} (${COMMIT_COUNT} commits)" \
+            --title "$PR_TITLE" \
             --body-file /tmp/pr_body.md \
-            --label "upstream-sync" 2>&1) || \
-          PR_URL=$(gh pr create \
-            -R "${{ github.repository }}" \
-            --base vibectl-main \
-            --head "$SYNC_BRANCH" \
-            --title "Upstream sync: CCA ${SHORT_SHA} (${COMMIT_COUNT} commits)" \
-            --body-file /tmp/pr_body.md)
+            --label "upstream-sync" 2>&1) && PR_URL="$FIRST_ATTEMPT_OUTPUT" || true
+
+          if [ -z "$PR_URL" ]; then
+            echo "::warning::First PR creation attempt failed. Error output:"
+            echo "$FIRST_ATTEMPT_OUTPUT"
+            echo ""
+            echo "Retrying without --label flag..."
+
+            # Retry without --label (most common failure cause)
+            PR_URL=$(gh pr create \
+              -R "${{ github.repository }}" \
+              --base vibectl-main \
+              --head "$SYNC_BRANCH" \
+              --title "$PR_TITLE" \
+              --body-file /tmp/pr_body.md 2>&1) || {
+              echo "::error::PR creation failed on both attempts."
+              echo "First attempt error: $FIRST_ATTEMPT_OUTPUT"
+              echo "Second attempt error: $PR_URL"
+              exit 1
+            }
+          fi
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "Created sync PR: $PR_URL"
