@@ -216,7 +216,7 @@ Tests that use `mock.module()` for CCA internal functions are isolated in `test/
 
 | CCA Directory            | Conflict Risk | Rationale                                                                   |
 | ------------------------ | ------------- | --------------------------------------------------------------------------- |
-| `ci/`                    | NONE          | vibectl-only directory; CI smoke test Dockerfile and script                |
+| `ci/`                    | NONE          | vibectl-only directory; CI smoke test Dockerfile and script                 |
 | `src/vibectl/`           | NONE          | vibectl-only directory; does not exist in upstream                          |
 | `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var       |
 | `src/entrypoints/`       | LOW           | `run.ts` untouched (dead code); `collect-inputs.ts` small patch (+13 lines) |
