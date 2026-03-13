@@ -56,7 +56,7 @@ jobs:
             echo "Installing latest gh CLI (no sudo)..."
             GH_VERSION=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')
             echo "Latest version: $GH_VERSION"
-            curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+            curl -fsSL -L "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
               -o /tmp/gh.tar.gz
             tar -xzf /tmp/gh.tar.gz -C /tmp
             mkdir -p "$HOME/.local/bin"
