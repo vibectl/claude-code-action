@@ -1,0 +1,387 @@
+# Upstream sync automation for vibectl CCA fork
+#
+# Two modes of operation:
+#   1. Daily cron (schedule): Silently updates upstream-tracking branch to match
+#      upstream/main. No PR creation, no noise.
+#   2. Manual dispatch (workflow_dispatch): Creates a sync PR merging
+#      upstream-tracking into vibectl-main with per-directory conflict risk
+#      classification and upstream workflow file detection.
+#
+# Design decisions:
+#   - Option B sync model: daily silent tracking + on-demand PR creation
+#   - Option D workflow policy: upstream .github/workflows/ files flagged, not carried
+#   - No auto-merge: all sync PRs require human review
+#   - Self-hosted runner: consistent with all vibectl CI
+#
+# Manual trigger:
+#   gh workflow run upstream-sync.yml -f mode=create-pr
+#   gh workflow run upstream-sync.yml -f mode=track
+name: Upstream Sync
+
+on:
+  schedule:
+    # Daily at 06:00 UTC — after typical upstream US-timezone release window
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Sync mode: track (update tracking branch) or create-pr (create sync PR)"
+        required: true
+        default: "track"
+        type: choice
+        options:
+          - track
+          - create-pr
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: [self-hosted, Linux, X64, vibectl]
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: vibectl-main
+
+      - name: Configure git
+        run: |
+          git config user.name "vibectl-bot"
+          git config user.email "bot@vibectl.dev"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/anthropics/claude-code-action.git 2>/dev/null || true
+          git fetch upstream main --quiet
+
+      - name: Determine mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "mode=track" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update upstream-tracking branch
+        id: tracking
+        run: |
+          TRACKING_SHA=$(git rev-parse upstream-tracking 2>/dev/null || echo "none")
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+
+          if [ "$TRACKING_SHA" = "$UPSTREAM_SHA" ]; then
+            echo "upstream-tracking is already up to date with upstream/main"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Updating upstream-tracking: $TRACKING_SHA -> $UPSTREAM_SHA"
+          git checkout upstream-tracking
+          git merge --ff-only upstream/main
+          git push origin upstream-tracking
+          git checkout vibectl-main
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Analyze upstream changes
+        if: steps.mode.outputs.mode == 'create-pr'
+        id: analyze
+        run: |
+          UPSTREAM_SHA="${{ steps.tracking.outputs.upstream_sha }}"
+          SHORT_SHA="${UPSTREAM_SHA:0:7}"
+
+          # Check for pending upstream changes
+          PENDING=$(git log vibectl-main..upstream-tracking --oneline 2>/dev/null || echo "")
+
+          if [ -z "$PENDING" ]; then
+            echo "No upstream changes to sync"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          COMMIT_COUNT=$(echo "$PENDING" | wc -l | tr -d ' ')
+          echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+
+          # Save commit list and changed files to temp files
+          git log vibectl-main..upstream-tracking --oneline --no-decorate | head -20 > /tmp/sync_commits.txt
+          git diff vibectl-main..upstream-tracking --name-only | sort > /tmp/sync_changed_files.txt
+
+          # Detect upstream workflow changes
+          WORKFLOW_FILES=$(grep "^\.github/workflows/" /tmp/sync_changed_files.txt || echo "")
+          if [ -n "$WORKFLOW_FILES" ]; then
+            echo "has_workflow_changes=true" >> "$GITHUB_OUTPUT"
+            echo "$WORKFLOW_FILES" > /tmp/sync_workflow_files.txt
+          else
+            echo "has_workflow_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Classify conflict risk
+        if: steps.mode.outputs.mode == 'create-pr' && steps.analyze.outputs.has_changes == 'true'
+        run: |
+          # Risk classification script implementing EP150 Section 10.5 risk matrix
+          cat > /tmp/classify_risk.sh << 'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+
+          # Explicit file-level risk (vibectl-patched or replaced files)
+          declare -A FILE_RISK=(
+            ["src/github/context.ts"]="HIGH"
+            ["src/github/constants.ts"]="LOW"
+            ["src/github/token.ts"]="NONE"
+            ["src/entrypoints/collect-inputs.ts"]="LOW"
+            ["src/entrypoints/run.ts"]="NONE"
+            ["src/mcp/install-mcp-server.ts"]="NONE"
+            ["src/github/operations/git-config.ts"]="NONE"
+          )
+
+          # Directory-level defaults (longest prefix match used)
+          declare -A DIR_RISK=(
+            ["src/github/api/"]="NONE"
+            ["src/github/data/"]="NONE"
+            ["src/github/validation/"]="NONE"
+            ["src/github/utils/"]="NONE"
+            ["src/github/operations/"]="NONE"
+            ["src/github/"]="LOW"
+            ["src/entrypoints/"]="LOW"
+            ["src/mcp/"]="NONE"
+            ["src/modes/"]="NONE"
+            ["src/create-prompt/"]="NONE"
+            ["src/utils/"]="NONE"
+            ["src/vibectl/"]="NONE"
+            ["base-action/"]="NONE"
+            ["test/"]="NONE"
+            [".github/"]="NONE"
+          )
+
+          HIGH=()
+          LOW=()
+          NONE=()
+          UNKNOWN=()
+
+          while IFS= read -r file; do
+            [[ -z "$file" || "$file" =~ ^[[:space:]]*$ ]] && continue
+
+            risk="${FILE_RISK[$file]:-}"
+
+            if [ -z "$risk" ]; then
+              best=""
+              best_len=0
+              for dir in "${!DIR_RISK[@]}"; do
+                if [[ "$file" == "$dir"* ]] && [ ${#dir} -gt $best_len ]; then
+                  best="$dir"
+                  best_len=${#dir}
+                fi
+              done
+              risk="${DIR_RISK[$best]:-UNKNOWN}"
+            fi
+
+            case "$risk" in
+              HIGH)    HIGH+=("$file") ;;
+              LOW)     LOW+=("$file") ;;
+              NONE)    NONE+=("$file") ;;
+              *)       UNKNOWN+=("$file") ;;
+            esac
+          done < /tmp/sync_changed_files.txt
+
+          # Write risk report as markdown
+          exec > /tmp/risk_report.md
+
+          if [ ${#HIGH[@]} -gt 0 ]; then
+            echo '### :red_circle: HIGH Risk (vibectl patches may conflict)'
+            echo ''
+            echo 'These files have vibectl patches and high upstream churn. Manual review required.'
+            echo ''
+            for f in "${HIGH[@]}"; do echo "- \`$f\`"; done
+            echo ''
+          fi
+
+          if [ ${#LOW[@]} -gt 0 ]; then
+            echo '### :yellow_circle: LOW Risk (small patches, likely clean merge)'
+            echo ''
+            for f in "${LOW[@]}"; do echo "- \`$f\`"; done
+            echo ''
+          fi
+
+          if [ ${#NONE[@]} -gt 0 ]; then
+            echo '### :green_circle: NO Risk (no vibectl modifications)'
+            echo ''
+            echo "${#NONE[@]} files with no vibectl modifications (clean merge expected)."
+            echo ''
+            echo '<details>'
+            echo '<summary>Show files</summary>'
+            echo ''
+            for f in "${NONE[@]}"; do echo "- \`$f\`"; done
+            echo ''
+            echo '</details>'
+            echo ''
+          fi
+
+          if [ ${#UNKNOWN[@]} -gt 0 ]; then
+            echo '### :white_circle: UNKNOWN Risk (not in risk matrix)'
+            echo ''
+            echo 'New files or directories not yet classified. Review manually.'
+            echo ''
+            for f in "${UNKNOWN[@]}"; do echo "- \`$f\`"; done
+            echo ''
+          fi
+          SCRIPT
+
+          chmod +x /tmp/classify_risk.sh
+          bash /tmp/classify_risk.sh
+
+      - name: Create sync PR
+        if: steps.mode.outputs.mode == 'create-pr' && steps.analyze.outputs.has_changes == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH_DATE=$(date +%Y-%m-%d)
+          SYNC_BRANCH="sync/upstream-${BRANCH_DATE}"
+          SHORT_SHA="${{ steps.analyze.outputs.short_sha }}"
+          COMMIT_COUNT="${{ steps.analyze.outputs.commit_count }}"
+
+          # Clean up existing sync branch if present
+          if git ls-remote --exit-code origin "refs/heads/${SYNC_BRANCH}" >/dev/null 2>&1; then
+            echo "Sync branch ${SYNC_BRANCH} already exists — recreating"
+            git push origin --delete "${SYNC_BRANCH}" 2>/dev/null || true
+          fi
+
+          # Create sync branch from vibectl-main and merge upstream-tracking
+          git checkout -b "$SYNC_BRANCH" vibectl-main
+
+          HAS_CONFLICTS="false"
+          if ! git merge upstream-tracking --no-edit \
+            -m "Merge upstream CCA (${SHORT_SHA}) into vibectl-main"; then
+            echo "Merge has conflicts — committing conflict markers for human resolution"
+            git add -A
+            git commit --no-edit \
+              -m "Merge upstream CCA (${SHORT_SHA}) — CONFLICTS NEED RESOLUTION" || true
+            HAS_CONFLICTS="true"
+          fi
+
+          git push origin "$SYNC_BRANCH"
+          echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "has_conflicts=$HAS_CONFLICTS" >> "$GITHUB_OUTPUT"
+
+          # Assemble PR body from temp files
+          {
+            echo "## Upstream Sync: ${COMMIT_COUNT} commits (${SHORT_SHA})"
+            echo ""
+            echo "Syncs upstream CCA changes from \`upstream/main\` into \`vibectl-main\`."
+            echo ""
+            echo "**Upstream ref**: \`${{ steps.tracking.outputs.upstream_sha }}\`"
+            echo "**Commits pending**: ${COMMIT_COUNT}"
+
+            # Conflict warning
+            if [ "$HAS_CONFLICTS" = "true" ]; then
+              echo ""
+              echo "## :rotating_light: Merge Conflicts"
+              echo ""
+              echo "This sync PR contains **unresolved merge conflicts**. Conflict markers are committed to enable review."
+              echo ""
+              echo "**To resolve:**"
+              echo "1. Check out the sync branch: \`git checkout ${SYNC_BRANCH}\`"
+              echo "2. Resolve conflicts in the marked files"
+              echo "3. Commit the resolution and push"
+              echo "4. Re-run CI to validate"
+            fi
+
+            # Workflow changes warning (Option D)
+            if [ "${{ steps.analyze.outputs.has_workflow_changes }}" = "true" ]; then
+              echo ""
+              echo "## :warning: Upstream Workflow Changes Detected (Option D Policy)"
+              echo ""
+              echo "Upstream CCA includes new or modified workflow files. Per vibectl's **Option D workflow policy**, upstream workflows are **not carried into vibectl-main**. Review these files and decide:"
+              echo "- **Ignore**: upstream workflow not relevant to vibectl"
+              echo "- **Adapt**: create a vibectl-equivalent workflow inspired by upstream intent"
+              echo "- **Adopt**: carry the upstream workflow (exception to Option D — document rationale)"
+              echo ""
+              echo "**Files:**"
+              echo '```'
+              cat /tmp/sync_workflow_files.txt
+              echo '```'
+            fi
+
+            echo ""
+            echo "## Upstream Commits"
+            echo ""
+            echo '```'
+            cat /tmp/sync_commits.txt
+            echo '```'
+
+            echo ""
+            echo "## Conflict Risk Classification"
+            echo ""
+            echo "Risk levels per [FORK_CHANGES.md](./FORK_CHANGES.md) merge conflict risk assessment."
+            echo ""
+            cat /tmp/risk_report.md
+
+            echo "## Review Checklist"
+            echo ""
+            echo "- [ ] Review HIGH risk files for patch conflicts"
+            echo "- [ ] Verify CCA test suite passes (CI triggered on this PR)"
+            echo "- [ ] Check for new dependencies or env var assumptions"
+            echo "- [ ] Verify vibectl integration layer tests still pass"
+            echo "- [ ] If upstream workflows changed: apply Option D policy (see warning above if present)"
+            echo ""
+            echo "---"
+            echo "*Generated by upstream-sync workflow. All sync merges require human review.*"
+          } > /tmp/pr_body.md
+
+          # Create PR (try with label first, fall back without)
+          PR_URL=$(gh pr create \
+            --base vibectl-main \
+            --head "$SYNC_BRANCH" \
+            --title "Upstream sync: CCA ${SHORT_SHA} (${COMMIT_COUNT} commits)" \
+            --body-file /tmp/pr_body.md \
+            --label "upstream-sync" 2>&1) || \
+          PR_URL=$(gh pr create \
+            --base vibectl-main \
+            --head "$SYNC_BRANCH" \
+            --title "Upstream sync: CCA ${SHORT_SHA} (${COMMIT_COUNT} commits)" \
+            --body-file /tmp/pr_body.md)
+
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "Created sync PR: $PR_URL"
+
+      - name: Trigger CI on sync branch
+        if: steps.mode.outputs.mode == 'create-pr' && steps.analyze.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SYNC_BRANCH="${{ steps.pr.outputs.sync_branch }}"
+          echo "Dispatching ci-all.yml on branch: $SYNC_BRANCH"
+          gh workflow run ci-all.yml --ref "$SYNC_BRANCH"
+          echo "CI dispatched successfully"
+
+      - name: Summary
+        run: |
+          MODE="${{ steps.mode.outputs.mode }}"
+          {
+            echo "## Upstream Sync Summary"
+            echo ""
+            echo "**Mode**: ${MODE}"
+            echo "**Upstream SHA**: ${{ steps.tracking.outputs.upstream_sha }}"
+            echo "**Tracking updated**: ${{ steps.tracking.outputs.changed }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MODE" = "create-pr" ]; then
+            if [ "${{ steps.analyze.outputs.has_changes }}" = "true" ]; then
+              {
+                echo "**PR**: ${{ steps.pr.outputs.pr_url }}"
+                echo "**Conflicts**: ${{ steps.pr.outputs.has_conflicts }}"
+                echo "**Workflow changes**: ${{ steps.analyze.outputs.has_workflow_changes }}"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "**Result**: No upstream changes to sync" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
