@@ -22,22 +22,27 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   container-build:
-    name: Container Build & Smoke Test
+    name: Container Build & Test
     # Self-hosted runner has Docker CE + buildx (ubuntu-latest does not guarantee Docker)
     runs-on: [self-hosted, Linux, X64, vibectl]
     steps:
       - uses: actions/checkout@v6
 
-      - name: Build smoke test image
+      - name: Build container test image
         run: |
           docker build \
             -f ci/Dockerfile.smoke-test \
-            -t cca-smoke-test:ci \
+            -t cca-container-test:ci \
             .
 
       - name: Run smoke test
-        run: docker run --rm cca-smoke-test:ci
+        run: docker run --rm cca-container-test:ci
+
+      - name: Run integration test
+        run: |
+          docker run --rm cca-container-test:ci \
+            bun run /opt/cca/ci/integration-test.ts
 
       - name: Cleanup image
         if: always()
-        run: docker rmi cca-smoke-test:ci 2>/dev/null || true
+        run: docker rmi cca-container-test:ci 2>/dev/null || true

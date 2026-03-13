@@ -188,6 +188,7 @@ These files compose on top of Phase 2's CCA source patches to form a complete ex
 | `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification   | Fork-only file; no conflict risk          |
 | `ci/Dockerfile.smoke-test`            | CI container image for CCA executability validation           | Fork-only file; no conflict risk          |
 | `ci/smoke-test.ts`                    | Smoke test script validating CCA imports and container layout | Fork-only file; no conflict risk          |
+| `ci/integration-test.ts`             | Container integration test validating CCA execution chain     | Fork-only file; no conflict risk          |
 | `FORK_CHANGES.md`                     | This document                                                 | Fork-only file; no conflict risk          |
 
 ## Test Organization

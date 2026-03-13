@@ -39,6 +39,7 @@ COPY src/ /opt/cca/src/
 COPY base-action/ /opt/cca/base-action/
 COPY package.json bun.lock tsconfig.json /opt/cca/
 COPY ci/smoke-test.ts /opt/cca/ci/smoke-test.ts
+COPY ci/integration-test.ts /opt/cca/ci/integration-test.ts
 
 # Install production dependencies
 WORKDIR /opt/cca
