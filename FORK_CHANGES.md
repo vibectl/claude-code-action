@@ -181,15 +181,24 @@ These files compose on top of Phase 2's CCA source patches to form a complete ex
 
 ## CI/Configuration Changes
 
-| File Path                             | What Changes                                                  | Re-application                            |
-| ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- |
-| `.github/workflows/ci.yml`            | Fork CI workflow runs CCA test suite on `vibectl-main` branch | Maintained independently from upstream CI |
-| `.github/workflows/ci-all.yml`        | Orchestrates CI with `workflow_dispatch` support for sync     | Maintained independently from upstream CI |
-| `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification   | Fork-only file; no conflict risk          |
-| `ci/Dockerfile.smoke-test`            | CI container image for CCA executability validation           | Fork-only file; no conflict risk          |
-| `ci/smoke-test.ts`                    | Smoke test script validating CCA imports and container layout | Fork-only file; no conflict risk          |
-| `ci/integration-test.ts`              | Container integration test validating CCA execution chain     | Fork-only file; no conflict risk          |
-| `FORK_CHANGES.md`                     | This document                                                 | Fork-only file; no conflict risk          |
+| File Path                             | What Changes                                                                                        | Re-application                            |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `.github/workflows/ci.yml`            | Fork CI: pinned Bun 1.2.12 across all jobs, dependency caching via `actions/cache`                  | Maintained independently from upstream CI |
+| `.github/workflows/ci-all.yml`        | Orchestrates CI with `workflow_dispatch`; image cleanup logs errors instead of swallowing           | Maintained independently from upstream CI |
+| `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification and patched file inventory              | Fork-only file; no conflict risk          |
+| `ci/Dockerfile.smoke-test`            | CI container image: base image SHA-pinned, Bun installed via checksum-verified zip (not curl\|bash) | Fork-only file; no conflict risk          |
+| `ci/smoke-test.ts`                    | Smoke test script validating CCA imports and container layout                                       | Fork-only file; no conflict risk          |
+| `ci/integration-test.ts`              | Container integration test validating CCA execution chain                                           | Fork-only file; no conflict risk          |
+| `FORK_CHANGES.md`                     | This document                                                                                       | Fork-only file; no conflict risk          |
+
+### CI Hardening Details
+
+- **Bun version determinism**: All CI jobs (test, prettier, typecheck) use `oven-sh/setup-bun@v2` with `bun-version: 1.2.12`. No `latest` tags.
+- **Dependency caching**: `actions/cache@v4` caches `~/.bun/install/cache` keyed on `bun.lock` hash, reducing redundant installs.
+- **Dockerfile supply chain**: Bun installed via direct zip download + `sha256sum -c` verification against published checksums, replacing `curl | bash`.
+- **Dockerfile reproducibility**: Base image (`debian:trixie-slim`) pinned to SHA256 digest.
+- **Error visibility**: Container image cleanup step logs errors to stdout instead of redirecting to `/dev/null`.
+- **Sync PR transparency**: Upstream sync PR body includes patched file inventory listing all CCA source files modified by vibectl.
 
 ## Test Organization
 

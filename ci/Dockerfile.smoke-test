@@ -14,7 +14,7 @@
 #   docker build -f ci/Dockerfile.smoke-test -t cca-smoke-test .
 #   docker run --rm cca-smoke-test
 
-FROM debian:trixie-slim
+FROM debian:trixie-slim@sha256:1d3c811171a08a5adaa4a163fbafd96b61b87aa871bbc7aa15431ac275d3d430
 
 ARG BUN_VERSION=1.2.12
 
@@ -27,8 +27,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bun runtime (same version as production Dockerfile)
-RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s -- "bun-v${BUN_VERSION}"
+# Install Bun runtime with SHA256 checksum verification
+# Checksum from https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/SHASUMS256.txt
+ARG BUN_SHA256=3337964faa31d8bce199f91708130710ef2e70b98ff34a34f590b1745880a633
+RUN curl -fsSL -o /tmp/bun.zip \
+      "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+    && echo "${BUN_SHA256}  /tmp/bun.zip" | sha256sum -c - \
+    && unzip -q /tmp/bun.zip -d /tmp/bun-extract \
+    && mv /tmp/bun-extract/bun-linux-x64/bun /usr/local/bin/bun \
+    && chmod +x /usr/local/bin/bun \
+    && rm -rf /tmp/bun.zip /tmp/bun-extract
 
 # Create non-root user matching production (UID 1000, sandbox)
 RUN useradd --create-home --uid 1000 --shell /bin/bash sandbox

@@ -347,6 +347,19 @@ jobs:
             echo ""
             cat /tmp/risk_report.md
 
+            echo "## vibectl Patched Files"
+            echo ""
+            echo "CCA source files modified by vibectl that need merge attention if upstream changes overlap:"
+            echo ""
+            echo "| File | Patch Summary |"
+            echo "|------|---------------|"
+            echo "| \`src/github/constants.ts\` | Bot identity env var fallback (+10/-4) |"
+            echo "| \`src/github/context.ts\` | VIBECTL_CONTEXT_JSON fallback with try-catch and validation (+47/-2) |"
+            echo "| \`src/entrypoints/collect-inputs.ts\` | VIBECTL_TASK_CONFIG file fallback (+14/-1) |"
+            echo ""
+            echo "See [FORK_CHANGES.md](./FORK_CHANGES.md) for re-application instructions."
+            echo ""
+
             echo "## Review Checklist"
             echo ""
             echo "- [ ] Review HIGH risk files for patch conflicts"

@@ -45,4 +45,6 @@ jobs:
 
       - name: Cleanup image
         if: always()
-        run: docker rmi cca-container-test:ci 2>/dev/null || true
+        run: |
+          echo "Cleaning up container test image..."
+          docker rmi cca-container-test:ci || echo "Warning: image cleanup failed (may already be removed)"
