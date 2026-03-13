@@ -181,7 +181,11 @@ jobs:
                   best_len=${#dir}
                 fi
               done
-              risk="${DIR_RISK[$best]:-UNKNOWN}"
+              if [ -z "$best" ]; then
+                risk="UNKNOWN"
+              else
+                risk="${DIR_RISK[$best]:-UNKNOWN}"
+              fi
             fi
 
             case "$risk" in
