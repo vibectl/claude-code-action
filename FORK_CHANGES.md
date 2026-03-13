@@ -13,9 +13,53 @@ per the fork governance model.
 
 ## Fork Governance
 
-- **Upstream sync cadence**: Monthly routine sync, immediate for security fixes
-- **Diff visibility**: `git diff upstream-tracking...vibectl-main` shows the exact fork diff
-- **Conflict resolution**: Temporary `sync/upstream-YYYY-MM-DD` branches for merge conflicts
+### Sync Process
+
+Upstream sync is automated via `.github/workflows/upstream-sync.yml` with two modes:
+
+| Mode        | Trigger                    | Action                                                               |
+| ----------- | -------------------------- | -------------------------------------------------------------------- |
+| **Track**   | Daily cron (06:00 UTC)     | Fast-forwards `upstream-tracking` to match `upstream/main`. No PR.   |
+| **Sync PR** | Manual `workflow_dispatch` | Creates PR from `upstream-tracking` into `vibectl-main` with review. |
+
+**Sync cadence**: Daily silent tracking. On-demand PR creation when sync is needed (routine monthly, immediate for security fixes).
+
+**How to create a sync PR**:
+
+```bash
+gh workflow run upstream-sync.yml -f mode=create-pr
+```
+
+The sync PR includes:
+
+- Per-directory conflict risk classification (see Merge Conflict Risk Assessment below)
+- List of upstream commits pending merge
+- Upstream workflow file detection (see Workflow Policy below)
+- Review checklist for the human reviewer
+
+**No auto-merge**: All sync PRs require human review. Even conflict-free merges may introduce behavioral changes, new dependencies, or env var assumptions that affect vibectl's security model.
+
+### Diff Visibility
+
+- **Fork diff**: `git diff upstream-tracking...vibectl-main` shows the exact fork diff
+- **Pending upstream**: `git log vibectl-main..upstream-tracking --oneline` shows unsynced upstream commits
+- **Conflict resolution**: Temporary `sync/upstream-YYYY-MM-DD` branches isolate merge work from `vibectl-main`
+
+### Workflow Policy (Option D)
+
+Upstream CCA workflows (`.github/workflows/`) are **not carried into vibectl-main**. vibectl maintains its own CI workflows independently.
+
+**Rationale**: CCA's workflows are designed for Anthropic's CI infrastructure (GitHub-hosted runners, Anthropic API keys for integration tests, CCA-specific release automation). These do not fit vibectl's model (self-hosted runner, no Anthropic API in fork CI, different release cadence). Carrying upstream workflows would create maintenance burden and false CI failures.
+
+**When upstream adds or modifies workflows**: The sync PR body flags these files with an Option D policy notice. The reviewer decides per-file:
+
+- **Ignore**: upstream workflow not relevant to vibectl
+- **Adapt**: create a vibectl-equivalent workflow inspired by upstream intent
+- **Adopt**: carry the upstream workflow (exception to Option D — document rationale in this file)
+
+### CI Validation for Sync PRs
+
+The upstream-sync workflow dispatches `ci-all.yml` on the sync branch after creating the PR. This runs the full fork CI suite (unit tests, formatting, type checking) against the merged code before human review. The sync PR also triggers CI automatically via the `pull_request` event on `ci-all.yml`.
 
 ## Applied Patches
 
@@ -90,49 +134,91 @@ export const CLAUDE_BOT_LOGIN = process.env.BOT_LOGIN ?? "claude[bot]";
 
 **Justification** (EP150 Section 8.4, Option 1): References `process.env.GITHUB_ACTION_PATH` for MCP server script paths. The vibectl entry adapter sets `GITHUB_ACTION_PATH=/opt/cca` (where CCA source is installed in the container Dockerfile). This is a zero-diff approach that preserves the file unchanged.
 
-## Planned Modifications (Future Phases)
+## vibectl Integration Layer (3 files, 561 LOC total)
 
-### Replaced Files
+These files compose on top of Phase 2's CCA source patches to form a complete execution path from task payload to scanned output. They live in `src/vibectl/` and have zero merge conflict risk with upstream CCA.
 
-| File Path                | Original LOC | Replacement LOC (est.) | Reason                                                                                                                                                                                        | Re-application                                                                                                                            |
-| ------------------------ | ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/entrypoints/run.ts` | 315          | ~150                   | CCA's unified orchestrator is tightly coupled to GitHub Actions lifecycle (`@actions/core`, `GITHUB_PATH`, `GITHUB_STEP_SUMMARY`). vibectl's entry point bridges task queue to CCA execution. | Re-compose from CCA internals: import `detectMode`, `prepareTagMode`, `prepareAgentMode`, `runClaude` and compose with vibectl lifecycle. |
-| `src/github/token.ts`    | 151          | ~40                    | CCA's OIDC-to-Anthropic exchange replaced by vibectl's installation token injection.                                                                                                          | Read `GITHUB_TOKEN` from env (set by vibectl runner worker). Much simpler than original.                                                  |
+### `src/vibectl/entry-adapter.ts` — CCA execution orchestrator (207 LOC)
 
-### vibectl-Specific Additions
+**Justification** (EP150 Section 4.2, Option B — recompose from CCA internals): CCA's `run.ts` is tightly coupled to GitHub Actions lifecycle (`@actions/core`, `GITHUB_PATH`, `GITHUB_STEP_SUMMARY`). The entry adapter recomposes the same orchestration from CCA's internal imports (`detectMode`, `prepareTagMode`, `prepareAgentMode`, `runClaude`) with vibectl's lifecycle. This keeps `run.ts` and `token.ts` untouched as dead code (zero diff, zero merge conflict risk).
 
-| File Path                       | Est. LOC | Purpose                                                                            | Re-application                        |
-| ------------------------------- | -------- | ---------------------------------------------------------------------------------- | ------------------------------------- |
-| `src/vibectl/entry-adapter.ts`  | ~100     | Bridges vibectl task dispatch payload to CCA execution                             | Self-contained file; no conflict risk |
-| `src/vibectl/output-scanner.ts` | ~50      | Applies gitleaks-based output scanning to CCA execution output                     | Self-contained file; no conflict risk |
-| `src/vibectl/auth-bridge.ts`    | ~80      | Configures container auth: AI proxy URL, installation token, proxy signing headers | Self-contained file; no conflict risk |
+**What it does**: Parses a vibectl task payload, configures auth (via auth-bridge), sets `VIBECTL_CONTEXT_JSON` (activating the Phase 2 context.ts patch), detects mode, invokes CCA's prepare and run flow, and applies output scanning post-execution.
 
-### CI/Configuration Changes
+**Re-application after upstream sync**: Self-contained file in `src/vibectl/`; no conflict risk. If upstream changes CCA internal function signatures, update imports accordingly.
 
-| File Path                  | What Changes                                                  | Re-application                            |
-| -------------------------- | ------------------------------------------------------------- | ----------------------------------------- |
-| `.github/workflows/ci.yml` | Fork CI workflow runs CCA test suite on `vibectl-main` branch | Maintained independently from upstream CI |
-| `FORK_CHANGES.md`          | This document                                                 | Fork-only file; no conflict risk          |
+**Tests**: `test/vibectl/mocked/entry-adapter.test.ts` — 15 unit tests verifying orchestration logic with mocked CCA internals; `test/vibectl/mocked/integration.test.ts` — 3 integration tests verifying the full adapter-to-scanner flow.
+
+---
+
+### `src/vibectl/auth-bridge.ts` — Container credential configuration (110 LOC)
+
+**Justification** (EP150 Section 9): CCA's OIDC-based token setup (`token.ts`) is bypassed entirely. The auth bridge configures container environment variables for vibectl's authentication model: GitHub installation token (`GITHUB_TOKEN`), AI proxy URL (`ANTHROPIC_BASE_URL` with proxy headers), bot identity (`BOT_USER_ID`, `BOT_LOGIN`), MCP server paths (`GITHUB_ACTION_PATH`), and `@actions/core` file-based output paths (`GITHUB_OUTPUT`, `GITHUB_ENV`).
+
+**What it does**: Sets `process.env` variables that CCA's internal functions read, creates temp files for `@actions/core` output capture, and returns the temp directory path.
+
+**Re-application after upstream sync**: Self-contained file in `src/vibectl/`; no conflict risk.
+
+**Tests**: `test/vibectl/auth-bridge.test.ts` — 17 unit tests verifying all env var configurations, temp file creation, and default handling.
+
+---
+
+### `src/vibectl/output-scanner.ts` — Post-execution secret detection (244 LOC)
+
+**Justification** (EP150 Section 4.4; OD-4: post-execution only for launch): Applies gitleaks-derived pattern matching to CCA execution output before results are finalized. Contains 29 high-impact patterns covering API keys (Anthropic, OpenAI, AWS, GitHub, Stripe, Slack, npm, SendGrid, Twilio), private keys (RSA, OpenSSH, EC, generic), bearer tokens, JWTs, database connection strings with credentials, GCP service account keys, and generic secret/password assignments.
+
+**What it does**: `scanForSecrets()` detects secrets and returns findings with pattern names and line numbers. `redactSecrets()` replaces matches with `[REDACTED]`. Architecture supports pattern expansion — full 224-pattern integration from `@vibectl/shared/sanitize` deferred to EP152.
+
+**Re-application after upstream sync**: Self-contained file in `src/vibectl/`; no conflict risk.
+
+**Tests**: `test/vibectl/output-scanner.test.ts` — 26 unit tests covering all 29 pattern categories, multi-line detection, redaction, empty input handling, and custom pattern support.
+
+## Dead Code in Fork Execution Path
+
+| File Path                | Status    | Rationale                                                                                              |
+| ------------------------ | --------- | ------------------------------------------------------------------------------------------------------ |
+| `src/entrypoints/run.ts` | Dead code | Entry adapter calls CCA internals directly; `run.ts` is never invoked. Zero diff, zero conflict.       |
+| `src/github/token.ts`    | Dead code | Auth bridge injects `GITHUB_TOKEN` directly; OIDC exchange is never invoked. Zero diff, zero conflict. |
+
+## CI/Configuration Changes
+
+| File Path                             | What Changes                                                  | Re-application                            |
+| ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- |
+| `.github/workflows/ci.yml`            | Fork CI workflow runs CCA test suite on `vibectl-main` branch | Maintained independently from upstream CI |
+| `.github/workflows/ci-all.yml`        | Orchestrates CI with `workflow_dispatch` support for sync     | Maintained independently from upstream CI |
+| `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification   | Fork-only file; no conflict risk          |
+| `FORK_CHANGES.md`                     | This document                                                 | Fork-only file; no conflict risk          |
+
+## Test Organization
+
+Tests that use `mock.module()` for CCA internal functions are isolated in `test/vibectl/mocked/` to prevent Bun's global module mock cache from affecting other test files in the same run. This is a Bun test runner constraint — `mock.module()` is process-global.
+
+| Test Directory                       | Test Count | Description                                     |
+| ------------------------------------ | ---------- | ----------------------------------------------- |
+| `test/vibectl/`                      | 72         | Unit tests (no mock.module, no cache pollution) |
+| `test/vibectl/mocked/`               | 18         | Entry adapter + integration (mock.module used)  |
+| CCA suite (test/, base-action/test/) | 634        | Original CCA tests (zero regressions)           |
+| **Total**                            | **724**    | All passing                                     |
 
 ## Diff Surface Summary
 
-| Metric                               | Value            |
-| ------------------------------------ | ---------------- |
-| Total CCA source LOC                 | ~8,700           |
-| Lines untouched                      | ~7,549 (86.5%)   |
-| Lines changed in applied patches     | 42 net (3 files) |
-| Lines in replaced files (planned)    | ~466 (5.3%)      |
-| New vibectl-specific lines (planned) | ~230             |
-| **Total diff surface (projected)**   | **~456 lines**   |
+| Metric                             | Value                         |
+| ---------------------------------- | ----------------------------- |
+| Total CCA source LOC               | ~8,700                        |
+| Lines untouched                    | ~7,549 (86.5%)                |
+| Lines changed in applied patches   | 42 net (3 files)              |
+| New vibectl-specific lines         | 561 (3 files in src/vibectl/) |
+| Dead code (untouched, bypassed)    | 466 (run.ts + token.ts)       |
+| **CCA source diff (patches only)** | **42 lines (0.5%)**           |
 
 ## Merge Conflict Risk Assessment
 
-| CCA Directory            | Conflict Risk | Rationale                                                                    |
-| ------------------------ | ------------- | ---------------------------------------------------------------------------- |
-| `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var        |
-| `src/entrypoints/`       | LOW           | `run.ts` replaced (no conflict); `collect-inputs.ts` small patch (+13 lines) |
-| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +23 line patch           |
-| `src/github/operations/` | NONE          | Zero-diff approach: `GITHUB_SERVER_URL` already has default in `config.ts`   |
-| `src/modes/`             | NONE          | No vibectl modifications                                                     |
-| `src/create-prompt/`     | NONE          | No vibectl modifications                                                     |
-| `base-action/src/`       | NONE          | No vibectl modifications                                                     |
+| CCA Directory            | Conflict Risk | Rationale                                                                   |
+| ------------------------ | ------------- | --------------------------------------------------------------------------- |
+| `src/vibectl/`           | NONE          | vibectl-only directory; does not exist in upstream                          |
+| `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var       |
+| `src/entrypoints/`       | LOW           | `run.ts` untouched (dead code); `collect-inputs.ts` small patch (+13 lines) |
+| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +23 line patch          |
+| `src/github/operations/` | NONE          | Zero-diff approach: `GITHUB_SERVER_URL` already has default in `config.ts`  |
+| `src/modes/`             | NONE          | No vibectl modifications                                                    |
+| `src/create-prompt/`     | NONE          | No vibectl modifications                                                    |
+| `base-action/src/`       | NONE          | No vibectl modifications                                                    |
