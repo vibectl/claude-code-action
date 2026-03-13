@@ -267,7 +267,10 @@ await check("scanForSecrets detects known secret patterns", async () => {
   const result = scanForSecrets(textWithSecret);
 
   assert(result.containsSecrets === true, "Should detect secret in output");
-  assert(result.matchCount >= 1, `Expected matches >= 1, got ${result.matchCount}`);
+  assert(
+    result.matchCount >= 1,
+    `Expected matches >= 1, got ${result.matchCount}`,
+  );
   assert(
     result.findings.some((f) => f.patternName === "github-pat-classic"),
     "Should identify github-pat-classic pattern",
@@ -291,7 +294,10 @@ await check("scanForSecrets returns clean for safe text", async () => {
     result.containsSecrets === false,
     "Should not detect secrets in clean text",
   );
-  assert(result.matchCount === 0, `Expected 0 matches, got ${result.matchCount}`);
+  assert(
+    result.matchCount === 0,
+    `Expected 0 matches, got ${result.matchCount}`,
+  );
 });
 
 await check("redactSecrets replaces detected secrets", async () => {
@@ -380,7 +386,10 @@ await check(
       result.success === false,
       "Expected failure (no GitHub API in container)",
     );
-    assert(result.error !== undefined, "Expected error message from API failure");
+    assert(
+      result.error !== undefined,
+      "Expected error message from API failure",
+    );
 
     // The error message proves how far the chain progressed:
     // "Failed to check permissions for test-actor: ..." means:
@@ -418,14 +427,17 @@ await check(
     );
 
     // Mode detection evidence
-    assert(result.mode === "tag" || result.mode === "agent", "Mode should be set");
+    assert(
+      result.mode === "tag" || result.mode === "agent",
+      "Mode should be set",
+    );
 
     console.log(`         Result: success=${result.success} (expected false)`);
     console.log(`         Mode: ${result.mode}`);
+    console.log(`         Error: ${result.error?.substring(0, 120)}...`);
     console.log(
-      `         Error: ${result.error?.substring(0, 120)}...`,
+      `         Chain validated: auth -> context -> mode -> CCA prepare`,
     );
-    console.log(`         Chain validated: auth -> context -> mode -> CCA prepare`);
   },
 );
 
