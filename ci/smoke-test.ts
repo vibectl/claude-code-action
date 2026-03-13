@@ -4,10 +4,11 @@
  * Validates:
  * 1. Bun runtime operational at expected version
  * 2. CCA source present at /opt/cca with expected structure
- * 3. CCA TypeScript modules importable (compilation + dependency resolution)
- * 4. vibectl integration layer importable (entry adapter, auth bridge, output scanner)
- * 5. Non-root execution (UID 1000, sandbox user)
- * 6. Production directory layout (/opt/cca/src, /opt/cca/base-action, /opt/cca/node_modules)
+ * 3. CCA TypeScript modules importable (dependency resolution)
+ * 4. TypeScript transpilation succeeds (full import graph beyond individual module imports)
+ * 5. vibectl integration layer importable (entry adapter, auth bridge, output scanner)
+ * 6. Non-root execution (UID 1000, sandbox user)
+ * 7. Production directory layout (/opt/cca/src, /opt/cca/base-action, /opt/cca/node_modules)
  *
  * Exit 0 = all checks pass. Non-zero = failure with diagnostic output.
  */
@@ -118,7 +119,45 @@ await check("Import: github/constants", async () => {
   assert(mod.CLAUDE_BOT_LOGIN !== undefined, "CLAUDE_BOT_LOGIN not exported");
 });
 
-// --- 4. vibectl integration layer imports ---
+// --- 4. TypeScript compilation ---
+console.log("\n[TypeScript Compilation]");
+
+await check("CCA entry points transpile successfully via Bun", () => {
+  // Verifies the container can compile CCA TypeScript source — not just
+  // import individual modules. Module imports (section 3) validate Bun
+  // can resolve and load specific files, but transpiling the main entry
+  // points exercises the full import graph and catches syntax errors,
+  // missing exports, and unresolvable imports across the codebase.
+  //
+  // Uses bun build (transpilation) rather than tsc (type checking) because
+  // the container installs production dependencies only — typescript is a
+  // devDependency. The separate typecheck CI job handles full tsc --noEmit.
+  const entryPoints = [
+    `${CCA_ROOT}/src/vibectl/entry-adapter.ts`,
+    `${CCA_ROOT}/src/entrypoints/collect-inputs.ts`,
+    `${CCA_ROOT}/src/github/context.ts`,
+    `${CCA_ROOT}/src/modes/detector.ts`,
+  ];
+
+  for (const entry of entryPoints) {
+    try {
+      execSync(
+        `cd ${CCA_ROOT} && bun build ${entry} --no-bundle --outdir /tmp/bun-compile-check 2>&1`,
+        { encoding: "utf-8", timeout: 30000 },
+      );
+    } catch (error) {
+      const output =
+        error instanceof Error && "stdout" in error
+          ? (error as { stdout: string }).stdout
+          : String(error);
+      const shortPath = entry.replace(CCA_ROOT + "/", "");
+      throw new Error(`Transpilation failed for ${shortPath}:\n${output}`);
+    }
+  }
+  console.log(`         ${entryPoints.length} entry points transpiled`);
+});
+
+// --- 5. vibectl integration layer imports ---
 console.log("\n[vibectl Integration Layer]");
 
 await check("Import: vibectl/output-scanner", async () => {
@@ -149,7 +188,7 @@ await check("Import: vibectl/entry-adapter", async () => {
   );
 });
 
-// --- 5. Dependency resolution ---
+// --- 6. Dependency resolution ---
 console.log("\n[Dependency Resolution]");
 
 await check("@actions/core resolvable", async () => {

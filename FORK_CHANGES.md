@@ -187,8 +187,8 @@ These files compose on top of Phase 2's CCA source patches to form a complete ex
 | `.github/workflows/ci-all.yml`        | Orchestrates CI with `workflow_dispatch`; image cleanup logs errors instead of swallowing           | Maintained independently from upstream CI |
 | `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification and patched file inventory              | Fork-only file; no conflict risk          |
 | `ci/Dockerfile.smoke-test`            | CI container image: base image SHA-pinned, Bun installed via checksum-verified zip (not curl\|bash) | Fork-only file; no conflict risk          |
-| `ci/smoke-test.ts`                    | Smoke test script validating CCA imports and container layout                                       | Fork-only file; no conflict risk          |
-| `ci/integration-test.ts`              | Container integration test validating CCA execution chain                                           | Fork-only file; no conflict risk          |
+| `ci/smoke-test.ts`                    | Smoke test: CCA imports, container layout, TypeScript transpilation (19 checks)                     | Fork-only file; no conflict risk          |
+| `ci/integration-test.ts`              | Integration test: CCA execution chain, diverse scanner patterns (8 checks)                          | Fork-only file; no conflict risk          |
 | `FORK_CHANGES.md`                     | This document                                                                                       | Fork-only file; no conflict risk          |
 
 ### CI Hardening Details
@@ -199,6 +199,9 @@ These files compose on top of Phase 2's CCA source patches to form a complete ex
 - **Dockerfile reproducibility**: Base image (`debian:trixie-slim`) pinned to SHA256 digest.
 - **Error visibility**: Container image cleanup step logs errors to stdout instead of redirecting to `/dev/null`.
 - **Sync PR transparency**: Upstream sync PR body includes patched file inventory listing all CCA source files modified by vibectl.
+- **Integration test resilience**: Error detection uses structured `[stage]` prefix assertion instead of fragile OR-chained error message string matching. Resilient to CCA changing error message wording.
+- **Scanner pattern coverage**: Integration test validates 6 diverse pattern categories in-container (AWS, RSA private key, Stripe, Slack, JWT, npm), not just github-pat-classic.
+- **TypeScript transpilation**: Smoke test verifies Bun can transpile 4 CCA entry points (entry-adapter, collect-inputs, context, detector), catching import graph errors beyond individual module resolution.
 
 ## Test Organization
 

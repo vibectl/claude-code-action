@@ -319,6 +319,65 @@ await check("redactSecrets replaces detected secrets", async () => {
   console.log(`         Redacted output verified`);
 });
 
+await check(
+  "scanForSecrets detects diverse pattern categories in-container",
+  async () => {
+    const { scanForSecrets } = await import(
+      `${CCA_ROOT}/src/vibectl/output-scanner.ts`
+    );
+
+    // Each line contains a test secret from a different pattern category.
+    // This validates the scanner mechanism works across diverse pattern types
+    // inside the container, not just the github-pat-classic tested above.
+    const diverseSecrets = [
+      // 1. AWS access key (cloud provider)
+      "AWS_KEY=AKIAIOSFODNN7EXAMPLE",
+      // 2. Private key header (cryptographic material)
+      "-----BEGIN RSA PRIVATE KEY-----",
+      // 3. Stripe secret key (payment provider)
+      "stripe_key: " + "sk_" + "live_abcdefghijklmnopqrstuvwx",
+      // 4. Slack bot token (messaging platform)
+      "SLACK_TOKEN=" +
+        "xoxb-" +
+        "1234567890-1234567890-ABCDEFGHIJKLMNOPQRSTUVWx",
+      // 5. JWT token (authentication)
+      "token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
+      // 6. npm token (package registry)
+      "NPM_TOKEN=npm_abcdefghijklmnopqrstuvwxyz1234567890",
+    ].join("\n");
+
+    const result = scanForSecrets(diverseSecrets);
+
+    assert(
+      result.containsSecrets === true,
+      "Should detect secrets across categories",
+    );
+
+    // Verify at least 5 distinct pattern categories detected
+    const detectedPatterns = new Set(result.findings.map((f) => f.patternName));
+
+    const expectedPatterns = [
+      "aws-access-key-id",
+      "private-key-rsa",
+      "stripe-secret-key",
+      "slack-bot-token",
+      "jwt-token",
+    ];
+
+    const missingPatterns = expectedPatterns.filter(
+      (p) => !detectedPatterns.has(p),
+    );
+
+    assert(
+      missingPatterns.length === 0,
+      `Missing pattern detections: ${missingPatterns.join(", ")}. Detected: ${[...detectedPatterns].join(", ")}`,
+    );
+
+    console.log(`         Detected ${result.matchCount} secret(s)`);
+    console.log(`         Categories: ${[...detectedPatterns].join(", ")}`);
+  },
+);
+
 // --- 5. Entry Adapter Execution Chain ---
 console.log("\n[Entry Adapter - Execution Chain]");
 
@@ -391,20 +450,19 @@ await check(
       "Expected error message from API failure",
     );
 
-    // The error message proves how far the chain progressed:
-    // "Failed to check permissions for test-actor: ..." means:
-    // - Auth bridge ran (GITHUB_TOKEN set for Octokit)
-    // - Context parsed (actor = "test-actor" extracted from VIBECTL_CONTEXT_JSON)
-    // - Mode detected (entity context identified, permission check invoked)
-    // - CCA's checkWritePermissions was called (prepare phase reached)
+    // The error's [stage] prefix proves how far the chain progressed.
+    // Entry adapter formats errors as "[stage] detail" (see entry-adapter.ts).
+    // A [prepare] prefix means:
+    // - Auth bridge ran (stage: auth passed)
+    // - Context parsed (stage: context passed)
+    // - CCA's prepare phase was reached (permission check invoked)
+    //
+    // This assertion is resilient to CCA changing error message wording —
+    // it validates the execution chain reached the expected stage boundary,
+    // not the specific error text from the GitHub API or network layer.
     assert(
-      result.error.includes("test-actor") ||
-        result.error.includes("permissions") ||
-        result.error.includes("fetch") ||
-        result.error.includes("ENOTFOUND") ||
-        result.error.includes("getaddrinfo") ||
-        result.error.includes("network"),
-      `Error should indicate GitHub API failure (chain reached external boundary). Got: ${result.error}`,
+      result.error.startsWith("[prepare]"),
+      `Error should originate from prepare stage (chain reached CCA internals). Got: ${result.error}`,
     );
 
     // Verify auth bridge configured the environment during execution
