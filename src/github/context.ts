@@ -130,11 +130,34 @@ export type AutomationContext = BaseContext & {
 // Union type for all contexts
 export type GitHubContext = ParsedGitHubContext | AutomationContext;
 
+/**
+ * Build the raw context object — from @actions/github in Actions,
+ * or from VIBECTL_CONTEXT_JSON env var in non-Actions contexts.
+ */
+function getRawContext(): {
+  eventName: string;
+  payload: Record<string, any>;
+  repo: { owner: string; repo: string };
+  actor: string;
+} {
+  const vibectlJson = process.env.VIBECTL_CONTEXT_JSON;
+  if (vibectlJson) {
+    const parsed = JSON.parse(vibectlJson);
+    return {
+      eventName: parsed.eventName,
+      payload: parsed.payload,
+      repo: { owner: parsed.repo.owner, repo: parsed.repo.repo },
+      actor: parsed.actor,
+    };
+  }
+  return github.context;
+}
+
 export function parseGitHubContext(): GitHubContext {
-  const context = github.context;
+  const context = getRawContext();
 
   const commonFields = {
-    runId: process.env.GITHUB_RUN_ID!,
+    runId: process.env.GITHUB_RUN_ID || "0",
     eventAction: context.payload.action,
     repository: {
       owner: context.repo.owner,

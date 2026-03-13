@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+
 export function collectActionInputsPresence(): string {
   const inputDefaults: Record<string, string> = {
     trigger_phrase: "@claude",
@@ -28,7 +30,18 @@ export function collectActionInputsPresence(): string {
     ssh_signing_key: "",
   };
 
-  const allInputsJson = process.env.ALL_INPUTS;
+  let allInputsJson = process.env.ALL_INPUTS;
+  if (!allInputsJson) {
+    // Fallback: read from task config file (non-Actions contexts)
+    const configPath = process.env.VIBECTL_TASK_CONFIG;
+    if (configPath) {
+      try {
+        allInputsJson = readFileSync(configPath, "utf-8");
+      } catch {
+        // Config file not found or unreadable
+      }
+    }
+  }
   if (!allInputsJson) {
     console.log("ALL_INPUTS environment variable not found");
     return JSON.stringify({});
