@@ -113,6 +113,20 @@ export const HIGH_IMPACT_PATTERNS: readonly SecretPattern[] = [
   },
 
   // Generic high-value patterns
+  //
+  // False-positive mitigation strategy for generic patterns:
+  //   1. Patterns require an assignment operator (= or :) with a quoted value,
+  //      reducing matches on narrative text or variable names alone.
+  //   2. Minimum value lengths (16-20 chars) filter out short config values
+  //      (e.g., password="test") that are unlikely to be real credentials.
+  //   3. Character class restrictions ([A-Za-z0-9_-]) exclude values with
+  //      spaces or special chars that indicate prose, not secrets.
+  //   4. Known false-positive categories (code examples, documentation
+  //      snippets, test fixtures) are accepted at launch scope — EP152
+  //      integrates the full 224-pattern set with sensitivity tuning.
+  //
+  // Callers that need to suppress specific patterns for a known context
+  // can pass a filtered pattern list to scanForSecrets().
   {
     name: "bearer-token",
     pattern:

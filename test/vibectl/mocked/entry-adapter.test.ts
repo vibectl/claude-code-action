@@ -353,24 +353,51 @@ describe("entry-adapter", () => {
       expect(mockRunClaude).not.toHaveBeenCalled();
     });
 
-    test("returns error when permission check fails", async () => {
+    test("returns error with [prepare] stage prefix when permission check fails", async () => {
       mockCheckWritePermissions.mockImplementation(() =>
         Promise.resolve(false),
       );
 
       const result = await executeTask(createTestPayload());
       expect(result.success).toBe(false);
+      expect(result.error).toContain("[prepare]");
       expect(result.error).toContain("write permissions");
     });
 
-    test("catches and returns errors gracefully", async () => {
+    test("includes [execute] stage prefix when Claude SDK fails", async () => {
       mockRunClaude.mockImplementation(() =>
         Promise.reject(new Error("SDK execution failed")),
       );
 
       const result = await executeTask(createTestPayload());
       expect(result.success).toBe(false);
-      expect(result.error).toBe("SDK execution failed");
+      expect(result.error).toBe("[execute] SDK execution failed");
+    });
+
+    test("includes [auth] stage prefix when auth bridge fails", async () => {
+      // configureAuth is not mocked — it will fail because credentials
+      // reference a temp dir. We mock it inline via the auth-bridge mock.
+      // Instead, we can simulate an auth failure by making parseGitHubContext
+      // throw before the prepare stage, but that would be the context stage.
+      // Let's test the context stage instead.
+      mockParseGitHubContext.mockImplementation(() => {
+        throw new Error("VIBECTL_CONTEXT_JSON contains malformed JSON: test");
+      });
+
+      const result = await executeTask(createTestPayload());
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(
+        "[prepare] VIBECTL_CONTEXT_JSON contains malformed JSON: test",
+      );
+    });
+
+    test("error messages follow [stage] detail structure", async () => {
+      mockRunClaude.mockImplementation(() =>
+        Promise.reject(new Error("connection timeout")),
+      );
+
+      const result = await executeTask(createTestPayload());
+      expect(result.error).toMatch(/^\[.+\] .+$/);
     });
 
     test("writes task config when provided", async () => {

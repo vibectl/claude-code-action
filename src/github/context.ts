@@ -142,7 +142,42 @@ function getRawContext(): {
 } {
   const vibectlJson = process.env.VIBECTL_CONTEXT_JSON;
   if (vibectlJson) {
-    const parsed = JSON.parse(vibectlJson);
+    let parsed: Record<string, any>;
+    try {
+      parsed = JSON.parse(vibectlJson);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new Error(
+        `VIBECTL_CONTEXT_JSON contains malformed JSON: ${detail}`,
+      );
+    }
+
+    if (!parsed.eventName || typeof parsed.eventName !== "string") {
+      throw new Error(
+        'VIBECTL_CONTEXT_JSON missing required property: "eventName"',
+      );
+    }
+    if (!parsed.payload || typeof parsed.payload !== "object") {
+      throw new Error(
+        'VIBECTL_CONTEXT_JSON missing required property: "payload"',
+      );
+    }
+    if (
+      !parsed.repo ||
+      typeof parsed.repo !== "object" ||
+      !parsed.repo.owner ||
+      !parsed.repo.repo
+    ) {
+      throw new Error(
+        'VIBECTL_CONTEXT_JSON missing required property: "repo" (expected {owner, repo})',
+      );
+    }
+    if (!parsed.actor || typeof parsed.actor !== "string") {
+      throw new Error(
+        'VIBECTL_CONTEXT_JSON missing required property: "actor"',
+      );
+    }
+
     return {
       eventName: parsed.eventName,
       payload: parsed.payload,

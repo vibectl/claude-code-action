@@ -94,27 +94,31 @@ export async function executeTask(
 ): Promise<AdapterResult> {
   let context: GitHubContext | undefined;
   let mode: "tag" | "agent" = "agent";
+  let stage = "init";
 
   try {
-    // Step 1: Configure authentication and environment
+    // Stage: auth — Configure authentication and environment
+    stage = "auth";
     const { tempDir } = await configureAuth(payload.credentials);
 
-    // Step 2: Set GitHub context for Phase 2 patch (context.ts getRawContext())
+    // Stage: context — Set GitHub context for Phase 2 patch (context.ts getRawContext())
+    stage = "context";
     process.env.VIBECTL_CONTEXT_JSON = JSON.stringify(payload.contextJson);
 
-    // Step 3: Write task config file for Phase 2 patch (collect-inputs.ts)
+    // Write task config file for Phase 2 patch (collect-inputs.ts)
     if (payload.taskConfig) {
       const configPath = `${tempDir}/task-config.json`;
       await writeFile(configPath, JSON.stringify(payload.taskConfig));
       process.env.VIBECTL_TASK_CONFIG = configPath;
     }
 
-    // Step 4: Set prompt if provided
+    // Set prompt if provided
     if (payload.prompt) {
       process.env.PROMPT = payload.prompt;
     }
 
-    // Step 5: Invoke CCA Phase 1 — Prepare
+    // Stage: prepare — Invoke CCA Phase 1 (mode detection, permissions, trigger check)
+    stage = "prepare";
     const actionInputsPresent = collectActionInputsPresence();
     context = parseGitHubContext();
     mode = detectMode(context);
@@ -134,7 +138,7 @@ export async function executeTask(
         return {
           success: false,
           mode,
-          error: "Actor does not have write permissions to the repository",
+          error: `[prepare] Actor does not have write permissions to the repository`,
         };
       }
     }
@@ -159,7 +163,8 @@ export async function executeTask(
         ? await prepareTagMode({ context, octokit, githubToken })
         : await prepareAgentMode({ context, octokit, githubToken });
 
-    // Step 6: Invoke CCA Phase 3 — Run Claude
+    // Stage: execute — Invoke CCA Phase 3 (Run Claude)
+    stage = "execute";
     process.env.INPUT_ACTION_INPUTS_PRESENT = actionInputsPresent;
     process.env.CLAUDE_CODE_ACTION = "1";
     process.env.DETAILED_PERMISSION_MESSAGES = "1";
@@ -182,7 +187,8 @@ export async function executeTask(
       model: process.env.ANTHROPIC_MODEL,
     });
 
-    // Step 7: Scan output for secrets (post-execution, per OD-4)
+    // Stage: scan — Scan output for secrets (post-execution, per OD-4)
+    stage = "scan";
     let scanResult: ScanResult | undefined;
     if (claudeResult.executionFile && existsSync(claudeResult.executionFile)) {
       const outputContent = await readFile(claudeResult.executionFile, "utf-8");
@@ -197,11 +203,11 @@ export async function executeTask(
       scanResult,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       success: false,
       mode,
-      error: errorMessage,
+      error: `[${stage}] ${detail}`,
     };
   }
 }

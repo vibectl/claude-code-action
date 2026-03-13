@@ -130,6 +130,81 @@ describe("parseGitHubContext VIBECTL_CONTEXT_JSON fallback", () => {
     expect(ctx.runId).toBe("0");
   });
 
+  test("throws meaningful error on malformed JSON", () => {
+    process.env.VIBECTL_CONTEXT_JSON = "not valid json {{{";
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      "VIBECTL_CONTEXT_JSON contains malformed JSON:",
+    );
+  });
+
+  test("throws meaningful error when eventName is missing", () => {
+    process.env.VIBECTL_CONTEXT_JSON = JSON.stringify({
+      payload: { action: "created" },
+      repo: { owner: "test", repo: "test" },
+      actor: "user",
+    });
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      'VIBECTL_CONTEXT_JSON missing required property: "eventName"',
+    );
+  });
+
+  test("throws meaningful error when payload is missing", () => {
+    process.env.VIBECTL_CONTEXT_JSON = JSON.stringify({
+      eventName: "issue_comment",
+      repo: { owner: "test", repo: "test" },
+      actor: "user",
+    });
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      'VIBECTL_CONTEXT_JSON missing required property: "payload"',
+    );
+  });
+
+  test("throws meaningful error when repo is missing", () => {
+    process.env.VIBECTL_CONTEXT_JSON = JSON.stringify({
+      eventName: "issue_comment",
+      payload: { action: "created" },
+      actor: "user",
+    });
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      'VIBECTL_CONTEXT_JSON missing required property: "repo"',
+    );
+  });
+
+  test("throws meaningful error when repo.owner is missing", () => {
+    process.env.VIBECTL_CONTEXT_JSON = JSON.stringify({
+      eventName: "issue_comment",
+      payload: { action: "created" },
+      repo: { repo: "test" },
+      actor: "user",
+    });
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      'VIBECTL_CONTEXT_JSON missing required property: "repo"',
+    );
+  });
+
+  test("throws meaningful error when actor is missing", () => {
+    process.env.VIBECTL_CONTEXT_JSON = JSON.stringify({
+      eventName: "issue_comment",
+      payload: { action: "created" },
+      repo: { owner: "test", repo: "test" },
+    });
+
+    const { parseGitHubContext } = require("../../src/github/context");
+    expect(() => parseGitHubContext()).toThrow(
+      'VIBECTL_CONTEXT_JSON missing required property: "actor"',
+    );
+  });
+
   test("reads input env vars (PROMPT, TRIGGER_PHRASE, etc.)", () => {
     const payload: Partial<PullRequestEvent> = {
       action: "opened",

@@ -63,7 +63,7 @@ The upstream-sync workflow dispatches `ci-all.yml` on the sync branch after crea
 
 ## Applied Patches
 
-### Minimally Patched Files (3 files, 42 lines net change)
+### Minimally Patched Files (3 files, 64 lines net change)
 
 #### `src/github/constants.ts` — Bot identity configuration
 
@@ -89,9 +89,9 @@ export const CLAUDE_BOT_LOGIN = process.env.BOT_LOGIN ?? "claude[bot]";
 
 **Justification** (EP150 Section 2.1, Component #11; Section 6): CCA's `parseGitHubContext()` calls `github.context` from `@actions/github`, which reads `GITHUB_EVENT_PATH` and `GITHUB_REPOSITORY` env vars set by the GitHub Actions runner. In vibectl's container, these env vars do not exist and `@actions/github` context construction fails. Without this patch, CCA cannot determine the event type, repository, or actor.
 
-**What changed**: Added `getRawContext()` helper that checks for `VIBECTL_CONTEXT_JSON` env var first. If set, parses the JSON to construct the context object (same shape as `@actions/github` context: `eventName`, `payload`, `repo`, `actor`). If not set, falls through to `github.context` (original behavior). Also changed `GITHUB_RUN_ID` from non-null assertion (`!`) to fallback (`|| "0"`) for safety in non-Actions contexts.
+**What changed**: Added `getRawContext()` helper that checks for `VIBECTL_CONTEXT_JSON` env var first. If set, parses the JSON to construct the context object (same shape as `@actions/github` context: `eventName`, `payload`, `repo`, `actor`). If not set, falls through to `github.context` (original behavior). Also changed `GITHUB_RUN_ID` from non-null assertion (`!`) to fallback (`|| "0"`) for safety in non-Actions contexts. JSON.parse is wrapped in try-catch for meaningful error messages on malformed input. Required properties (`eventName`, `payload`, `repo`, `actor`) are validated after parse with descriptive errors.
 
-**Lines changed**: +25/-2 (23 net)
+**Lines changed**: +47/-2 (45 net)
 
 **`VIBECTL_CONTEXT_JSON` schema**:
 
@@ -106,9 +106,9 @@ export const CLAUDE_BOT_LOGIN = process.env.BOT_LOGIN ?? "claude[bot]";
 }
 ```
 
-**Re-application after upstream sync**: Add `getRawContext()` function before `parseGitHubContext()` and replace `github.context` reference with `getRawContext()` call. Change `process.env.GITHUB_RUN_ID!` to `process.env.GITHUB_RUN_ID || "0"`.
+**Re-application after upstream sync**: Add `getRawContext()` function before `parseGitHubContext()` and replace `github.context` reference with `getRawContext()` call. Change `process.env.GITHUB_RUN_ID!` to `process.env.GITHUB_RUN_ID || "0"`. Include try-catch around `JSON.parse` and required property validation for `eventName`, `payload`, `repo` (with `owner` and `repo` sub-properties), and `actor`.
 
-**Tests**: `test/vibectl/context-fallback.test.ts` — verifies issue_comment and pull_request context construction from JSON, fallback runId, and input env var reading.
+**Tests**: `test/vibectl/context-fallback.test.ts` — verifies issue_comment and pull_request context construction from JSON, fallback runId, input env var reading, malformed JSON error handling, and missing property validation (eventName, payload, repo, repo.owner, actor).
 
 ---
 
@@ -197,21 +197,21 @@ Tests that use `mock.module()` for CCA internal functions are isolated in `test/
 
 | Test Directory                       | Test Count | Description                                     |
 | ------------------------------------ | ---------- | ----------------------------------------------- |
-| `test/vibectl/`                      | 72         | Unit tests (no mock.module, no cache pollution) |
-| `test/vibectl/mocked/`               | 18         | Entry adapter + integration (mock.module used)  |
+| `test/vibectl/`                      | 81         | Unit tests (no mock.module, no cache pollution) |
+| `test/vibectl/mocked/`               | 22         | Entry adapter + integration (mock.module used)  |
 | CCA suite (test/, base-action/test/) | 634        | Original CCA tests (zero regressions)           |
-| **Total**                            | **724**    | All passing                                     |
+| **Total**                            | **737**    | All passing                                     |
 
 ## Diff Surface Summary
 
 | Metric                             | Value                         |
 | ---------------------------------- | ----------------------------- |
 | Total CCA source LOC               | ~8,700                        |
-| Lines untouched                    | ~7,549 (86.5%)                |
-| Lines changed in applied patches   | 42 net (3 files)              |
-| New vibectl-specific lines         | 561 (3 files in src/vibectl/) |
+| Lines untouched                    | ~7,527 (86.5%)                |
+| Lines changed in applied patches   | 64 net (3 files)              |
+| New vibectl-specific lines         | 573 (3 files in src/vibectl/) |
 | Dead code (untouched, bypassed)    | 466 (run.ts + token.ts)       |
-| **CCA source diff (patches only)** | **42 lines (0.5%)**           |
+| **CCA source diff (patches only)** | **64 lines (0.7%)**           |
 
 ## Merge Conflict Risk Assessment
 
@@ -221,7 +221,7 @@ Tests that use `mock.module()` for CCA internal functions are isolated in `test/
 | `src/vibectl/`           | NONE          | vibectl-only directory; does not exist in upstream                          |
 | `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var       |
 | `src/entrypoints/`       | LOW           | `run.ts` untouched (dead code); `collect-inputs.ts` small patch (+13 lines) |
-| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +23 line patch          |
+| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +45 line patch          |
 | `src/github/operations/` | NONE          | Zero-diff approach: `GITHUB_SERVER_URL` already has default in `config.ts`  |
 | `src/modes/`             | NONE          | No vibectl modifications                                                    |
 | `src/create-prompt/`     | NONE          | No vibectl modifications                                                    |

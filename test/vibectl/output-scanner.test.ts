@@ -249,6 +249,53 @@ describe("output-scanner", () => {
     });
   });
 
+  describe("generic pattern false-positive mitigation", () => {
+    test("generic-api-key-assignment does not match unquoted values", () => {
+      const text = "api_key = some-value-without-quotes";
+      const result = scanForSecrets(text);
+      const finding = result.findings.find(
+        (f) => f.patternName === "generic-api-key-assignment",
+      );
+      expect(finding).toBeUndefined();
+    });
+
+    test("generic-api-key-assignment does not match short quoted values", () => {
+      const text = 'api_key = "short"';
+      const result = scanForSecrets(text);
+      const finding = result.findings.find(
+        (f) => f.patternName === "generic-api-key-assignment",
+      );
+      expect(finding).toBeUndefined();
+    });
+
+    test("generic-secret-assignment does not match values under 16 chars", () => {
+      const text = 'secret = "tooshort"';
+      const result = scanForSecrets(text);
+      const finding = result.findings.find(
+        (f) => f.patternName === "generic-secret-assignment",
+      );
+      expect(finding).toBeUndefined();
+    });
+
+    test("generic-password-assignment does not match values under 8 chars", () => {
+      const text = 'password = "test"';
+      const result = scanForSecrets(text);
+      const finding = result.findings.find(
+        (f) => f.patternName === "generic-password-assignment",
+      );
+      expect(finding).toBeUndefined();
+    });
+
+    test("callers can exclude generic patterns by passing a filtered list", () => {
+      const text = 'api_key = "ABCDEFGHIJKLMNOPQRSTU_long_value"';
+      const nonGenericPatterns = HIGH_IMPACT_PATTERNS.filter(
+        (p) => !p.name.startsWith("generic-"),
+      );
+      const result = scanForSecrets(text, nonGenericPatterns);
+      expect(result.containsSecrets).toBe(false);
+    });
+  });
+
   describe("HIGH_IMPACT_PATTERNS", () => {
     test("contains expected pattern count", () => {
       // Verify we have a reasonable number of high-impact patterns
