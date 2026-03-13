@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { writeFileSync, unlinkSync, mkdirSync } from "fs";
+import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -27,9 +27,9 @@ describe("collectActionInputsPresence fallback", () => {
     delete process.env.ALL_INPUTS;
     delete process.env.VIBECTL_TASK_CONFIG;
 
-    const { collectActionInputsPresence } = require(
-      "../../src/entrypoints/collect-inputs",
-    );
+    const {
+      collectActionInputsPresence,
+    } = require("../../src/entrypoints/collect-inputs");
     const result = collectActionInputsPresence();
 
     expect(result).toBe(JSON.stringify({}));
@@ -42,9 +42,9 @@ describe("collectActionInputsPresence fallback", () => {
     });
     delete process.env.VIBECTL_TASK_CONFIG;
 
-    const { collectActionInputsPresence } = require(
-      "../../src/entrypoints/collect-inputs",
-    );
+    const {
+      collectActionInputsPresence,
+    } = require("../../src/entrypoints/collect-inputs");
     const result = JSON.parse(collectActionInputsPresence());
 
     // trigger_phrase differs from default "@claude" -> true
@@ -64,9 +64,9 @@ describe("collectActionInputsPresence fallback", () => {
     writeFileSync(tempConfigPath, JSON.stringify(taskConfig));
     process.env.VIBECTL_TASK_CONFIG = tempConfigPath;
 
-    const { collectActionInputsPresence } = require(
-      "../../src/entrypoints/collect-inputs",
-    );
+    const {
+      collectActionInputsPresence,
+    } = require("../../src/entrypoints/collect-inputs");
     const result = JSON.parse(collectActionInputsPresence());
 
     expect(result.trigger_phrase).toBe(true); // differs from default "@claude"
@@ -83,9 +83,9 @@ describe("collectActionInputsPresence fallback", () => {
     writeFileSync(tempConfigPath, JSON.stringify(taskConfig));
     process.env.VIBECTL_TASK_CONFIG = tempConfigPath;
 
-    const { collectActionInputsPresence } = require(
-      "../../src/entrypoints/collect-inputs",
-    );
+    const {
+      collectActionInputsPresence,
+    } = require("../../src/entrypoints/collect-inputs");
     const result = JSON.parse(collectActionInputsPresence());
 
     // Should use ALL_INPUTS value, not config file
@@ -96,9 +96,9 @@ describe("collectActionInputsPresence fallback", () => {
     delete process.env.ALL_INPUTS;
     process.env.VIBECTL_TASK_CONFIG = "/nonexistent/path/config.json";
 
-    const { collectActionInputsPresence } = require(
-      "../../src/entrypoints/collect-inputs",
-    );
+    const {
+      collectActionInputsPresence,
+    } = require("../../src/entrypoints/collect-inputs");
     const result = collectActionInputsPresence();
 
     expect(result).toBe(JSON.stringify({}));

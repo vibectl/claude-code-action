@@ -12,9 +12,7 @@ describe("constants bot identity fallback", () => {
   afterEach(() => {
     process.env = originalEnv;
     // Clear module cache so constants re-evaluate env vars
-    delete require.cache[
-      require.resolve("../../src/github/constants")
-    ];
+    delete require.cache[require.resolve("../../src/github/constants")];
   });
 
   test("uses CCA defaults when env vars are not set", async () => {
@@ -22,9 +20,7 @@ describe("constants bot identity fallback", () => {
     delete process.env.BOT_LOGIN;
 
     // Re-import to pick up env state
-    delete require.cache[
-      require.resolve("../../src/github/constants")
-    ];
+    delete require.cache[require.resolve("../../src/github/constants")];
     const { CLAUDE_APP_BOT_ID, CLAUDE_BOT_LOGIN } = await import(
       "../../src/github/constants"
     );
@@ -37,9 +33,7 @@ describe("constants bot identity fallback", () => {
     process.env.BOT_USER_ID = "12345678";
     process.env.BOT_LOGIN = "vibectl[bot]";
 
-    delete require.cache[
-      require.resolve("../../src/github/constants")
-    ];
+    delete require.cache[require.resolve("../../src/github/constants")];
     const { CLAUDE_APP_BOT_ID, CLAUDE_BOT_LOGIN } = await import(
       "../../src/github/constants"
     );

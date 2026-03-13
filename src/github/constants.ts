@@ -9,9 +9,7 @@
 /**
  * Claude App bot user ID — configurable via BOT_USER_ID env var
  */
-export const CLAUDE_APP_BOT_ID = Number(
-  process.env.BOT_USER_ID ?? "41898282",
-);
+export const CLAUDE_APP_BOT_ID = Number(process.env.BOT_USER_ID ?? "41898282");
 
 /**
  * Claude bot username — configurable via BOT_LOGIN env var

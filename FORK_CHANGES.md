@@ -30,6 +30,7 @@ per the fork governance model.
 **Lines changed**: +10/-4 (6 net)
 
 **Re-application after upstream sync**:
+
 ```typescript
 // Replace hardcoded values with:
 export const CLAUDE_APP_BOT_ID = Number(process.env.BOT_USER_ID ?? "41898282");
@@ -49,10 +50,13 @@ export const CLAUDE_BOT_LOGIN = process.env.BOT_LOGIN ?? "claude[bot]";
 **Lines changed**: +25/-2 (23 net)
 
 **`VIBECTL_CONTEXT_JSON` schema**:
+
 ```json
 {
   "eventName": "issue_comment",
-  "payload": { /* webhook event payload */ },
+  "payload": {
+    /* webhook event payload */
+  },
   "repo": { "owner": "org-name", "repo": "repo-name" },
   "actor": "username"
 }
@@ -112,23 +116,23 @@ export const CLAUDE_BOT_LOGIN = process.env.BOT_LOGIN ?? "claude[bot]";
 
 ## Diff Surface Summary
 
-| Metric                             | Value                   |
-| ---------------------------------- | ----------------------- |
-| Total CCA source LOC               | ~8,700                  |
-| Lines untouched                    | ~7,549 (86.5%)          |
-| Lines changed in applied patches   | 42 net (3 files)        |
-| Lines in replaced files (planned)  | ~466 (5.3%)             |
-| New vibectl-specific lines (planned)| ~230                   |
-| **Total diff surface (projected)** | **~456 lines**          |
+| Metric                               | Value            |
+| ------------------------------------ | ---------------- |
+| Total CCA source LOC                 | ~8,700           |
+| Lines untouched                      | ~7,549 (86.5%)   |
+| Lines changed in applied patches     | 42 net (3 files) |
+| Lines in replaced files (planned)    | ~466 (5.3%)      |
+| New vibectl-specific lines (planned) | ~230             |
+| **Total diff surface (projected)**   | **~456 lines**   |
 
 ## Merge Conflict Risk Assessment
 
-| CCA Directory            | Conflict Risk | Rationale                                                                           |
-| ------------------------ | ------------- | ----------------------------------------------------------------------------------- |
-| `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var               |
-| `src/entrypoints/`       | LOW           | `run.ts` replaced (no conflict); `collect-inputs.ts` small patch (+13 lines)        |
-| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +23 line patch                  |
-| `src/github/operations/` | NONE          | Zero-diff approach: `GITHUB_SERVER_URL` already has default in `config.ts`           |
-| `src/modes/`             | NONE          | No vibectl modifications                                                            |
-| `src/create-prompt/`     | NONE          | No vibectl modifications                                                            |
-| `base-action/src/`       | NONE          | No vibectl modifications                                                            |
+| CCA Directory            | Conflict Risk | Rationale                                                                    |
+| ------------------------ | ------------- | ---------------------------------------------------------------------------- |
+| `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var        |
+| `src/entrypoints/`       | LOW           | `run.ts` replaced (no conflict); `collect-inputs.ts` small patch (+13 lines) |
+| `src/github/`            | HIGH          | `context.ts` has high upstream churn and receives a +23 line patch           |
+| `src/github/operations/` | NONE          | Zero-diff approach: `GITHUB_SERVER_URL` already has default in `config.ts`   |
+| `src/modes/`             | NONE          | No vibectl modifications                                                     |
+| `src/create-prompt/`     | NONE          | No vibectl modifications                                                     |
+| `base-action/src/`       | NONE          | No vibectl modifications                                                     |

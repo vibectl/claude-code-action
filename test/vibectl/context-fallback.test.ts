@@ -1,7 +1,10 @@
 #!/usr/bin/env bun
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import type { IssueCommentEvent, PullRequestEvent } from "@octokit/webhooks-types";
+import type {
+  IssueCommentEvent,
+  PullRequestEvent,
+} from "@octokit/webhooks-types";
 
 /**
  * Tests for the VIBECTL_CONTEXT_JSON fallback path in parseGitHubContext().
