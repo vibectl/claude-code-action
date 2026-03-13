@@ -186,6 +186,8 @@ These files compose on top of Phase 2's CCA source patches to form a complete ex
 | `.github/workflows/ci.yml`            | Fork CI workflow runs CCA test suite on `vibectl-main` branch | Maintained independently from upstream CI |
 | `.github/workflows/ci-all.yml`        | Orchestrates CI with `workflow_dispatch` support for sync     | Maintained independently from upstream CI |
 | `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR with risk classification   | Fork-only file; no conflict risk          |
+| `ci/Dockerfile.smoke-test`            | CI container image for CCA executability validation           | Fork-only file; no conflict risk          |
+| `ci/smoke-test.ts`                    | Smoke test script validating CCA imports and container layout | Fork-only file; no conflict risk          |
 | `FORK_CHANGES.md`                     | This document                                                 | Fork-only file; no conflict risk          |
 
 ## Test Organization
@@ -214,6 +216,7 @@ Tests that use `mock.module()` for CCA internal functions are isolated in `test/
 
 | CCA Directory            | Conflict Risk | Rationale                                                                   |
 | ------------------------ | ------------- | --------------------------------------------------------------------------- |
+| `ci/`                    | NONE          | vibectl-only directory; CI smoke test Dockerfile and script                |
 | `src/vibectl/`           | NONE          | vibectl-only directory; does not exist in upstream                          |
 | `src/mcp/`               | NONE          | Zero-diff approach: `GITHUB_ACTION_PATH` set by entry adapter env var       |
 | `src/entrypoints/`       | LOW           | `run.ts` untouched (dead code); `collect-inputs.ts` small patch (+13 lines) |

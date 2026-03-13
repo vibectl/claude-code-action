@@ -2,7 +2,7 @@
 # Runs on vibectl-main pushes, PRs targeting vibectl-main, and manual dispatch
 # Integration test workflows (test-base-action, test-mcp-servers, etc.) are disabled
 # in the fork — they require ANTHROPIC_API_KEY and execute against Anthropic's API.
-# Fork CI validates: unit tests, formatting, and type checking.
+# Fork CI validates: unit tests, formatting, type checking, and container build.
 name: CI All
 
 on:
@@ -20,3 +20,24 @@ permissions:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+
+  container-build:
+    name: Container Build & Smoke Test
+    # Self-hosted runner has Docker CE + buildx (ubuntu-latest does not guarantee Docker)
+    runs-on: [self-hosted, Linux, X64, vibectl]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build smoke test image
+        run: |
+          docker build \
+            -f ci/Dockerfile.smoke-test \
+            -t cca-smoke-test:ci \
+            .
+
+      - name: Run smoke test
+        run: docker run --rm cca-smoke-test:ci
+
+      - name: Cleanup image
+        if: always()
+        run: docker rmi cca-smoke-test:ci 2>/dev/null || true
