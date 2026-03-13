@@ -1,12 +1,17 @@
-# Orchestrates all CI workflows - runs on PRs, pushes to main, and manual dispatch
-# Individual test workflows are called as reusable workflows
+# Orchestrates CI workflows for vibectl fork
+# Runs on vibectl-main pushes, PRs targeting vibectl-main, and manual dispatch
+# Integration test workflows (test-base-action, test-mcp-servers, etc.) are disabled
+# in the fork — they require ANTHROPIC_API_KEY and execute against Anthropic's API.
+# Fork CI validates: unit tests, formatting, and type checking.
 name: CI All
 
 on:
   push:
     branches:
-      - main
+      - vibectl-main
   pull_request:
+    branches:
+      - vibectl-main
   workflow_dispatch:
 
 permissions:
@@ -15,23 +20,3 @@ permissions:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
-
-  test-base-action:
-    uses: ./.github/workflows/test-base-action.yml
-    secrets: inherit # Required for ANTHROPIC_API_KEY
-
-  test-custom-executables:
-    uses: ./.github/workflows/test-custom-executables.yml
-    secrets: inherit
-
-  test-mcp-servers:
-    uses: ./.github/workflows/test-mcp-servers.yml
-    secrets: inherit
-
-  test-settings:
-    uses: ./.github/workflows/test-settings.yml
-    secrets: inherit
-
-  test-structured-output:
-    uses: ./.github/workflows/test-structured-output.yml
-    secrets: inherit

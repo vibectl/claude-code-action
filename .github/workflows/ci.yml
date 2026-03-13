@@ -1,7 +1,12 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - vibectl-main
   pull_request:
+    branches:
+      - vibectl-main
   workflow_call:
 
 jobs:
