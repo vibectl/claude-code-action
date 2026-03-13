@@ -53,14 +53,16 @@ jobs:
           if command -v gh &>/dev/null; then
             echo "gh CLI already installed: $(gh --version | head -1)"
           else
-            echo "Installing gh CLI..."
-            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-              | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-              | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq gh
-            echo "Installed: $(gh --version | head -1)"
+            echo "Installing gh CLI (no sudo)..."
+            GH_VERSION="2.74.0"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+              -o /tmp/gh.tar.gz
+            tar -xzf /tmp/gh.tar.gz -C /tmp
+            mkdir -p "$HOME/.local/bin"
+            cp "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" "$HOME/.local/bin/gh"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+            rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_amd64"
+            echo "Installed: $($HOME/.local/bin/gh --version | head -1)"
           fi
 
       - name: Configure git
