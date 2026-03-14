@@ -163,11 +163,11 @@ These files bridge vibectl's container dispatch to CCA's GitHub Actions executio
 
 ## CI/Configuration Changes
 
-| File Path                             | What Changes                                                                                        | Re-application                            |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `.github/workflows/ci.yml`            | Fork CI: unit tests, formatting, type checking. Pinned Bun 1.2.12, dependency caching.             | Maintained independently from upstream CI |
-| `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR creation                                                         | Fork-only file; no conflict risk          |
-| `FORK_CHANGES.md`                     | This document                                                                                       | Fork-only file; no conflict risk          |
+| File Path                             | What Changes                                                                           | Re-application                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `.github/workflows/ci.yml`            | Fork CI: unit tests, formatting, type checking. Pinned Bun 1.2.12, dependency caching. | Maintained independently from upstream CI |
+| `.github/workflows/upstream-sync.yml` | Daily tracking + on-demand sync PR creation                                            | Fork-only file; no conflict risk          |
+| `FORK_CHANGES.md`                     | This document                                                                          | Fork-only file; no conflict risk          |
 
 ## Test Organization
 
