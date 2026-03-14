@@ -7,7 +7,8 @@
     "format:check": "prettier --check .",
     "install-hooks": "bun run scripts/install-hooks.sh",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:action": "bun run scripts/build-action.ts"
   },
   "dependencies": {
     "@actions/core": "^1.10.1",
