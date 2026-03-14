@@ -52,9 +52,7 @@ export function buildTaskPayload(inputs: ActionInputs): TaskSubmissionPayload {
  * Submit a task to the vibectl REST API.
  * Returns the task ID on success, throws on failure.
  */
-export async function submitTask(
-  inputs: ActionInputs,
-): Promise<string> {
+export async function submitTask(inputs: ActionInputs): Promise<string> {
   const payload = buildTaskPayload(inputs);
   const url = `${inputs.apiUrl}/v1/tasks`;
 

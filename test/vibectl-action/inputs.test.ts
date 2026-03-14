@@ -77,7 +77,9 @@ describe("getInputs", () => {
   });
 
   function setupInputs(inputs: Record<string, string>) {
-    mockGetInput.mockImplementation(((name: string) => inputs[name] || "") as () => string);
+    mockGetInput.mockImplementation(
+      ((name: string) => inputs[name] || "") as () => string,
+    );
   }
 
   it("parses required inputs correctly", () => {

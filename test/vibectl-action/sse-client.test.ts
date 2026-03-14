@@ -1,11 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  mock,
-} from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import {
   processSSEEvent,
   parseSSELines,
@@ -269,13 +262,10 @@ describe("streamTaskOutput", () => {
   it("handles JSON error with nested object", async () => {
     global.fetch = mock(() =>
       Promise.resolve(
-        new Response(
-          JSON.stringify({ error: { message: "detailed error" } }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
+        new Response(JSON.stringify({ error: { message: "detailed error" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
       ),
     ) as unknown as typeof fetch;
 
@@ -291,9 +281,7 @@ describe("streamTaskOutput", () => {
 
   it("throws on non-OK HTTP response", async () => {
     global.fetch = mock(() =>
-      Promise.resolve(
-        new Response("Unauthorized", { status: 401 }),
-      ),
+      Promise.resolve(new Response("Unauthorized", { status: 401 })),
     ) as unknown as typeof fetch;
 
     await expect(
@@ -321,9 +309,7 @@ describe("streamTaskOutput", () => {
 
   it("sends correct authorization and accept headers", async () => {
     let capturedHeaders: Record<string, string> = {};
-    const sseBody = makeStreamFromChunks([
-      "event: complete\ndata: {}\n\n",
-    ]);
+    const sseBody = makeStreamFromChunks(["event: complete\ndata: {}\n\n"]);
 
     global.fetch = mock((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>;
@@ -335,11 +321,7 @@ describe("streamTaskOutput", () => {
       );
     }) as unknown as typeof fetch;
 
-    await streamTaskOutput(
-      "https://api.test/stream",
-      "my-api-key",
-      30000,
-    );
+    await streamTaskOutput("https://api.test/stream", "my-api-key", 30000);
 
     expect(capturedHeaders["Authorization"]).toBe("Bearer my-api-key");
     expect(capturedHeaders["Accept"]).toBe("text/event-stream");

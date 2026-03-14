@@ -1,48 +1,48 @@
-name: 'vibectl'
-description: 'Run Claude Code tasks via vibectl platform — isolated container execution with real-time streaming output'
-author: 'vibectl'
+name: "vibectl"
+description: "Run Claude Code tasks via vibectl platform — isolated container execution with real-time streaming output"
+author: "vibectl"
 
 inputs:
   api-key:
-    description: 'vibectl API key for authentication (use GitHub secrets)'
+    description: "vibectl API key for authentication (use GitHub secrets)"
     required: true
   prompt:
-    description: 'The prompt/instruction to execute with Claude Code'
+    description: "The prompt/instruction to execute with Claude Code"
     required: true
   api-url:
-    description: 'vibectl API endpoint URL'
+    description: "vibectl API endpoint URL"
     required: false
-    default: 'https://api.vibectl.dev'
+    default: "https://api.vibectl.dev"
   timeout:
-    description: 'Maximum execution time in seconds (default: 1800 / 30 minutes)'
+    description: "Maximum execution time in seconds (default: 1800 / 30 minutes)"
     required: false
-    default: '1800'
+    default: "1800"
   max-turns:
-    description: 'Maximum number of Claude agentic turns (limits conversation depth)'
+    description: "Maximum number of Claude agentic turns (limits conversation depth)"
     required: false
   env:
-    description: 'Environment variables to pass to the task (KEY=VALUE format, one per line)'
+    description: "Environment variables to pass to the task (KEY=VALUE format, one per line)"
     required: false
   egress-scanning:
-    description: 'Egress scanning mode override for this task (full or relay)'
+    description: "Egress scanning mode override for this task (full or relay)"
     required: false
 
 outputs:
   result:
-    description: 'Task execution result (completed, failed, timeout, unknown)'
+    description: "Task execution result (completed, failed, timeout, unknown)"
   task-id:
-    description: 'Unique task identifier for tracking'
+    description: "Unique task identifier for tracking"
   duration-ms:
-    description: 'Task execution duration in milliseconds'
+    description: "Task execution duration in milliseconds"
   cost-usd:
-    description: 'Estimated cost in USD (if available)'
+    description: "Estimated cost in USD (if available)"
   output:
-    description: 'Task stdout output'
+    description: "Task stdout output"
 
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: "node20"
+  main: "dist/index.js"
 
 branding:
-  icon: 'terminal'
-  color: 'blue'
+  icon: "terminal"
+  color: "blue"

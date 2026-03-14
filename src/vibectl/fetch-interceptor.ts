@@ -37,7 +37,9 @@ export function installFetchInterceptor(config: FetchInterceptorConfig): void {
 
   // Normalize: ensure the URL prefix ends with "/" for safe prefix matching.
   // This prevents "https://proxy.test" from matching "https://proxy.test.evil.com".
-  const urlPrefix = githubApiUrl.endsWith("/") ? githubApiUrl : `${githubApiUrl}/`;
+  const urlPrefix = githubApiUrl.endsWith("/")
+    ? githubApiUrl
+    : `${githubApiUrl}/`;
 
   // Store original fetch for restoration and delegation
   originalFetch = globalThis.fetch;
@@ -64,7 +66,9 @@ export function installFetchInterceptor(config: FetchInterceptorConfig): void {
 
   // Preserve the preconnect method from the original fetch (Bun-specific)
   if ("preconnect" in delegate) {
-    (interceptor as typeof fetch).preconnect = (delegate as typeof fetch).preconnect;
+    (interceptor as typeof fetch).preconnect = (
+      delegate as typeof fetch
+    ).preconnect;
   }
 
   globalThis.fetch = interceptor as typeof fetch;

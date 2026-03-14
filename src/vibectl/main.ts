@@ -47,7 +47,9 @@ export function parsePayload(): TaskPayload | AdapterResult {
 }
 
 /** Type guard: distinguishes error results from valid payloads */
-function isErrorResult(value: TaskPayload | AdapterResult): value is AdapterResult {
+function isErrorResult(
+  value: TaskPayload | AdapterResult,
+): value is AdapterResult {
   return "success" in value && (value as AdapterResult).success === false;
 }
 

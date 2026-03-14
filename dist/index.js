@@ -18847,7 +18847,9 @@ function getInputs() {
       throw new Error(`Invalid max-turns value: '${maxTurnsStr}' (must be a positive integer)`);
     }
   }
-  const egressScanningRaw = core.getInput("egress-scanning", { required: false });
+  const egressScanningRaw = core.getInput("egress-scanning", {
+    required: false
+  });
   let egressScanning;
   if (egressScanningRaw) {
     if (egressScanningRaw !== "full" && egressScanningRaw !== "relay") {

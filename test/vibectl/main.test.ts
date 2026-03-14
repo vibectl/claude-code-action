@@ -127,7 +127,9 @@ describe("main CLI parsePayload", () => {
     expect((result as any).credentials.githubApiUrl).toBe(
       "https://github-proxy.vibectl.dev/v1/github/cust/inst",
     );
-    expect((result as any).credentials.githubProxyToken).toBe("1234567890:base64sig");
+    expect((result as any).credentials.githubProxyToken).toBe(
+      "1234567890:base64sig",
+    );
     expect((result as any).credentials.egressMode).toBe("relay");
   });
 });

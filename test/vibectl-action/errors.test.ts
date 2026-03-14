@@ -6,7 +6,9 @@ import {
 
 describe("sanitizeMessage", () => {
   it("redacts Bearer tokens", () => {
-    const result = sanitizeMessage("Failed with Bearer vibe_secret123 in header");
+    const result = sanitizeMessage(
+      "Failed with Bearer vibe_secret123 in header",
+    );
     expect(result).not.toContain("vibe_secret123");
     expect(result).toContain("***");
   });

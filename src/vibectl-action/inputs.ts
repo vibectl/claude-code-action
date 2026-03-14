@@ -47,11 +47,12 @@ export function getInputs(): ActionInputs {
 
   const apiUrl =
     core.getInput("api-url", { required: false }) || "https://api.vibectl.dev";
-  const timeoutStr =
-    core.getInput("timeout", { required: false }) || "1800";
+  const timeoutStr = core.getInput("timeout", { required: false }) || "1800";
   const timeoutSeconds = parseInt(timeoutStr, 10);
   if (isNaN(timeoutSeconds) || timeoutSeconds <= 0) {
-    throw new Error(`Invalid timeout value: '${timeoutStr}' (must be a positive integer)`);
+    throw new Error(
+      `Invalid timeout value: '${timeoutStr}' (must be a positive integer)`,
+    );
   }
 
   const envRaw = core.getInput("env", { required: false }) || "";
@@ -62,15 +63,21 @@ export function getInputs(): ActionInputs {
   if (maxTurnsStr) {
     maxTurns = parseInt(maxTurnsStr, 10);
     if (isNaN(maxTurns) || maxTurns <= 0) {
-      throw new Error(`Invalid max-turns value: '${maxTurnsStr}' (must be a positive integer)`);
+      throw new Error(
+        `Invalid max-turns value: '${maxTurnsStr}' (must be a positive integer)`,
+      );
     }
   }
 
-  const egressScanningRaw = core.getInput("egress-scanning", { required: false });
+  const egressScanningRaw = core.getInput("egress-scanning", {
+    required: false,
+  });
   let egressScanning: string | undefined;
   if (egressScanningRaw) {
     if (egressScanningRaw !== "full" && egressScanningRaw !== "relay") {
-      throw new Error(`Invalid egress-scanning value: '${egressScanningRaw}' (must be 'full' or 'relay')`);
+      throw new Error(
+        `Invalid egress-scanning value: '${egressScanningRaw}' (must be 'full' or 'relay')`,
+      );
     }
     egressScanning = egressScanningRaw;
   }

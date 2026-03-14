@@ -47,7 +47,8 @@ describe("auth-bridge proxy extensions", () => {
     test("sets GITHUB_API_URL when githubApiUrl is provided", async () => {
       await configureAuth({
         ...baseCredentials,
-        githubApiUrl: "https://github-proxy.vibectl.dev/v1/github/cust_123/inst_456",
+        githubApiUrl:
+          "https://github-proxy.vibectl.dev/v1/github/cust_123/inst_456",
       });
       expect(process.env.GITHUB_API_URL).toBe(
         "https://github-proxy.vibectl.dev/v1/github/cust_123/inst_456",

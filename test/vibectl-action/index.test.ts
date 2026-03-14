@@ -64,7 +64,9 @@ describe("run (integration)", () => {
   });
 
   function setupInputs(inputs: Record<string, string>) {
-    mockGetInput.mockImplementation(((name: string) => inputs[name] || "") as () => string);
+    mockGetInput.mockImplementation(
+      ((name: string) => inputs[name] || "") as () => string,
+    );
   }
 
   it("completes full flow: submit + stream + outputs", async () => {
@@ -85,13 +87,10 @@ describe("run (integration)", () => {
     global.fetch = mock((url: string) => {
       if (url.includes("/v1/tasks") && !url.includes("/stream")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ task_id: "task-integration-1" }),
-            {
-              status: 202,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
+          new Response(JSON.stringify({ task_id: "task-integration-1" }), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          }),
         );
       }
       return Promise.resolve(
@@ -119,17 +118,15 @@ describe("run (integration)", () => {
       timeout: "60",
     });
 
-    const sseBody = makeStreamFromChunks([
-      "event: complete\ndata: {}\n\n",
-    ]);
+    const sseBody = makeStreamFromChunks(["event: complete\ndata: {}\n\n"]);
 
     global.fetch = mock((url: string) => {
       if (url.includes("/v1/tasks") && !url.includes("/stream")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ task_id: "task-dur" }),
-            { status: 202, headers: { "Content-Type": "application/json" } },
-          ),
+          new Response(JSON.stringify({ task_id: "task-dur" }), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          }),
         );
       }
       return Promise.resolve(
@@ -187,13 +184,10 @@ describe("run (integration)", () => {
     global.fetch = mock((url: string) => {
       if (url.includes("/v1/tasks") && !url.includes("/stream")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ task_id: "task-fail" }),
-            {
-              status: 202,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
+          new Response(JSON.stringify({ task_id: "task-fail" }), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          }),
         );
       }
       return Promise.resolve(
@@ -225,13 +219,10 @@ describe("run (integration)", () => {
     global.fetch = mock((url: string) => {
       if (url.includes("/v1/tasks") && !url.includes("/stream")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ task_id: "task-timeout" }),
-            {
-              status: 202,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
+          new Response(JSON.stringify({ task_id: "task-timeout" }), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          }),
         );
       }
       return Promise.reject(abortError);
@@ -260,13 +251,10 @@ describe("run (integration)", () => {
     global.fetch = mock((url: string) => {
       if (url.includes("/v1/tasks") && !url.includes("/stream")) {
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ task_id: "task-unknown" }),
-            {
-              status: 202,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
+          new Response(JSON.stringify({ task_id: "task-unknown" }), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          }),
         );
       }
       return Promise.resolve(

@@ -90,9 +90,7 @@ describe("buildTaskPayload", () => {
   });
 
   it("includes egress_scanning in pipeline_config_overrides", () => {
-    const payload = buildTaskPayload(
-      makeInputs({ egressScanning: "relay" }),
-    );
+    const payload = buildTaskPayload(makeInputs({ egressScanning: "relay" }));
 
     expect(payload.pipeline_config_overrides?.egress_scanning).toBe("relay");
   });

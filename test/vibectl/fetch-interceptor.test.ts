@@ -164,9 +164,9 @@ describe("fetch-interceptor", () => {
 
       // Should match: URL starts with proxyUrl
       await globalThis.fetch(`${proxyUrl}/repos/owner/repo/pulls/1`);
-      expect(new Headers(fetchCalls[0]!.init?.headers).get("X-Proxy-Token")).toBe(
-        "prefix-token",
-      );
+      expect(
+        new Headers(fetchCalls[0]!.init?.headers).get("X-Proxy-Token"),
+      ).toBe("prefix-token");
 
       // Should NOT match: different path
       await globalThis.fetch("https://proxy.test/other/path");

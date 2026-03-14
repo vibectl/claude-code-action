@@ -1,0 +1,44 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - vibectl-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    # Only run when the E2E_API_KEY secret is available
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/vibectl-main' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.12
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-deps-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-deps-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run integration test
+        env:
+          E2E_API_KEY: ${{ secrets.E2E_API_KEY }}
+          E2E_API_URL: https://vibectl-api-dev.vibectl-dev.workers.dev
+          E2E_TIMEOUT_MS: "120000"
+        run: |
+          if [ -z "$E2E_API_KEY" ]; then
+            echo "::warning::E2E_API_KEY secret not configured. Skipping integration test."
+            exit 0
+          fi
+          bun run scripts/integration-test.ts
