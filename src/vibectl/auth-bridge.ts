@@ -4,6 +4,7 @@
  * Bridges vibectl's authentication model to CCA's expected environment:
  * - GitHub installation token → GITHUB_TOKEN, GH_TOKEN
  * - AI proxy URL → ANTHROPIC_BASE_URL with proxy headers
+ * - GitHub egress proxy → GITHUB_API_URL + fetch interceptor
  * - Bot identity → BOT_USER_ID, BOT_LOGIN
  * - MCP server paths → GITHUB_ACTION_PATH
  * - Workflow tokens → DEFAULT_WORKFLOW_TOKEN
@@ -17,6 +18,7 @@
 import { mkdtemp, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { installFetchInterceptor } from "./fetch-interceptor.ts";
 
 /**
  * Task payload credentials provided by vibectl runner worker.
@@ -40,6 +42,12 @@ export interface TaskCredentials {
   botLogin: string;
   /** CCA source path in container (default: /opt/cca) */
   ccaSourcePath?: string;
+  /** GitHub egress proxy URL — when set, GITHUB_API_URL redirects all CCA Octokit calls */
+  githubApiUrl?: string;
+  /** HMAC proxy authentication token (format: {expiry}:{base64_signature}) */
+  githubProxyToken?: string;
+  /** Egress scanning mode: 'full' (scan + inject) or 'relay' (inject only) */
+  egressMode?: "full" | "relay";
 }
 
 /**
@@ -116,6 +124,25 @@ export async function configureAuth(
 
   // Workspace directory — where the cloned repo lives in the container
   process.env.GITHUB_WORKSPACE = process.env.GITHUB_WORKSPACE || "/workspace";
+
+  // GitHub egress proxy — redirects all CCA GitHub API calls through
+  // the centralized proxy. CCA's src/github/api/config.ts reads GITHUB_API_URL
+  // to set Octokit baseUrl, so all REST and GraphQL calls are redirected.
+  // MCP server processes also receive GITHUB_API_URL via install-mcp-server.ts.
+  if (credentials.githubApiUrl) {
+    process.env.GITHUB_API_URL = credentials.githubApiUrl;
+  }
+
+  // Fetch interceptor — injects X-Proxy-Token and X-Egress-Mode headers
+  // on requests matching the GitHub proxy URL. Only installed when the
+  // proxy token is present (no-op otherwise, global fetch stays unmodified).
+  if (credentials.githubProxyToken && credentials.githubApiUrl) {
+    installFetchInterceptor({
+      githubApiUrl: credentials.githubApiUrl,
+      proxyToken: credentials.githubProxyToken,
+      egressMode: credentials.egressMode || "full",
+    });
+  }
 
   return { tempDir };
 }
