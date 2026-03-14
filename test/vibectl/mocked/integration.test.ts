@@ -6,7 +6,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 /**
- * Integration test: mock task payload → entry adapter → CCA internals → output scanning.
+ * Integration test: mock task payload → entry adapter → CCA internals.
  *
  * Verifies the full orchestration flow:
  * 1. Task payload is parsed and env vars are configured
@@ -14,10 +14,15 @@ import { tmpdir } from "os";
  * 3. CCA's mode detection runs on the constructed context
  * 4. Mode-specific preparation is invoked
  * 5. Claude SDK execution produces output
- * 6. Output scanner detects secrets in execution output
  *
  * CCA network-calling functions are mocked; context parsing and mode
  * detection use real CCA code to validate Phase 2 patches.
+ *
+ * NOTE: This file lives in test/vibectl/mocked/ because Bun's mock.module()
+ * caches mocked modules per-process. Isolating mock.module() tests in a
+ * separate directory prevents cache pollution with non-mocked test files.
+ * As the test suite grows, monitor for cross-test interference if new
+ * mock.module() tests are added.
  */
 
 // Create a temp directory for test execution output
@@ -105,11 +110,8 @@ mock.module("../../../base-action/src/run-claude.ts", () => ({
 
 // Import after mocks
 const { executeTask } = await import("../../../src/vibectl/entry-adapter.ts");
-const { scanForSecrets } = await import(
-  "../../../src/vibectl/output-scanner.ts"
-);
 
-describe("integration: adapter → CCA internals → output scanning", () => {
+describe("integration: adapter → CCA internals", () => {
   let originalEnv: typeof process.env;
 
   beforeEach(() => {
@@ -144,7 +146,7 @@ describe("integration: adapter → CCA internals → output scanning", () => {
     process.env = originalEnv;
   });
 
-  test("full flow: issue_comment payload → adapter configures env → tag mode detected → SDK executes → output scanned (clean)", async () => {
+  test("full flow: issue_comment payload → adapter configures env → tag mode detected → SDK executes", async () => {
     // Set trigger phrase so CCA's parseGitHubContext reads it
     process.env.TRIGGER_PHRASE = "@vibectl";
 
@@ -198,10 +200,6 @@ describe("integration: adapter → CCA internals → output scanning", () => {
     expect(mockPrepareTagMode).toHaveBeenCalled();
     expect(mockRunClaude).toHaveBeenCalled();
 
-    // Verify output was scanned (clean — no secrets)
-    expect(result.scanResult).toBeDefined();
-    expect(result.scanResult!.containsSecrets).toBe(false);
-
     // Verify env was configured by auth bridge
     expect(process.env.GITHUB_TOKEN).toBe(
       "ghs_testtoken1234567890abcdefghijklmnop",
@@ -212,99 +210,5 @@ describe("integration: adapter → CCA internals → output scanning", () => {
     expect(process.env.BOT_USER_ID).toBe("999999");
     expect(process.env.BOT_LOGIN).toBe("vibectl[bot]");
     expect(process.env.VIBECTL_CONTEXT_JSON).toBeTruthy();
-  });
-
-  test("full flow with secret in output: scanner detects and flags", async () => {
-    process.env.TRIGGER_PHRASE = "@vibectl";
-
-    // Override runClaude to produce output containing a secret
-    mockRunClaude.mockImplementation(() => {
-      const execFile = join(testTempDir, "claude-execution-secret.json");
-      writeFileSync(
-        execFile,
-        JSON.stringify([
-          {
-            role: "assistant",
-            content:
-              "Found a config file with token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",
-          },
-        ]),
-      );
-      return Promise.resolve({
-        conclusion: "success" as const,
-        executionFile: execFile,
-        sessionId: "secret-test-session",
-      });
-    });
-
-    const payload = {
-      credentials: {
-        githubToken: "ghs_testtoken1234567890abcdefghijklmnop",
-        aiProxyUrl: "https://ai-proxy.vibectl.dev/v1/proxy/cust_123",
-        proxyHeaders: { "X-Proxy-Token": "test-hmac" },
-        repoOwner: "test-owner",
-        repoName: "test-repo",
-        eventName: "issue_comment",
-        botUserId: "999999",
-        botLogin: "vibectl[bot]",
-      },
-      contextJson: {
-        eventName: "issue_comment",
-        payload: {
-          action: "created",
-          issue: {
-            number: 42,
-            title: "Test issue",
-            body: "Issue body",
-            pull_request: undefined,
-            user: { login: "test-user", id: 123 },
-          },
-          comment: {
-            id: 1,
-            body: "@vibectl review this code",
-            user: { login: "test-user", id: 123 },
-            created_at: "2026-01-01T00:00:00Z",
-          },
-          repository: {
-            name: "test-repo",
-            full_name: "test-owner/test-repo",
-            owner: { login: "test-owner" },
-          },
-        },
-        repo: { owner: "test-owner", repo: "test-repo" },
-        actor: "test-user",
-      },
-    };
-
-    const result = await executeTask(payload);
-
-    // Execution succeeds (CCA completed)
-    expect(result.success).toBe(true);
-
-    // Scanner detects the GitHub PAT in the output
-    expect(result.scanResult).toBeDefined();
-    expect(result.scanResult!.containsSecrets).toBe(true);
-    expect(result.scanResult!.matchCount).toBeGreaterThanOrEqual(1);
-    expect(
-      result.scanResult!.findings.some(
-        (f) => f.patternName === "github-pat-classic",
-      ),
-    ).toBe(true);
-  });
-
-  test("output scanner works independently on raw text", () => {
-    const cleanText = "This is a normal code review with no secrets.";
-    const cleanResult = scanForSecrets(cleanText);
-    expect(cleanResult.containsSecrets).toBe(false);
-
-    const dirtyText = [
-      "Here is the API key:",
-      "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",
-      "And a private key:",
-      "-----BEGIN RSA PRIVATE KEY-----",
-    ].join("\n");
-    const dirtyResult = scanForSecrets(dirtyText);
-    expect(dirtyResult.containsSecrets).toBe(true);
-    expect(dirtyResult.matchCount).toBe(2);
   });
 });

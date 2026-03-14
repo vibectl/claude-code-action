@@ -67,6 +67,9 @@ export async function configureAuth(
   process.env.ANTHROPIC_API_KEY = "dummy-key-replaced-by-ai-proxy";
 
   // Proxy authentication headers
+  // Trusted source: proxyHeaders (e.g., X-Proxy-Token) come from the vibectl
+  // runner worker's task dispatch, not from user input. JSON injection is not
+  // a concern because the runner worker constructs these headers server-side.
   const headerEntries = Object.entries(credentials.proxyHeaders);
   if (headerEntries.length > 0) {
     // Claude Code SDK reads ANTHROPIC_CUSTOM_HEADERS as JSON
@@ -96,6 +99,14 @@ export async function configureAuth(
 
   // @actions/core file-based output paths (defense-in-depth)
   // These files capture core.setOutput() and core.exportVariable() calls
+  // from CCA during execution.
+  //
+  // EP152 output parsing contract:
+  //   GITHUB_OUTPUT format: key=value pairs (one per line), or
+  //     key<<delimiter / value / delimiter for multiline values.
+  //   GITHUB_ENV format: same as GITHUB_OUTPUT.
+  //   Runner worker reads these files after execution to extract
+  //   CCA results (e.g., conclusion, session ID, execution file path).
   const outputFile = join(tempDir, "github-output");
   const envFile = join(tempDir, "github-env");
   await writeFile(outputFile, "");

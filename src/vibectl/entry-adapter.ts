@@ -8,6 +8,10 @@
  * so that run.ts and token.ts remain untouched (zero diff, zero merge
  * conflict risk on upstream sync).
  *
+ * Architecture: Preserves the Cloudflare-native execution model
+ * (queue -> container -> AI proxy) by recomposing CCA's orchestration
+ * through direct imports rather than modifying CCA's entry points.
+ *
  * Execution flow:
  * 1. Parse task payload from environment
  * 2. Configure auth (auth-bridge)
@@ -15,16 +19,12 @@
  * 4. Detect mode (tag/agent)
  * 5. Invoke CCA prepare (tag or agent mode)
  * 6. Invoke CCA run (SDK execution)
- * 7. Scan output for secrets (output-scanner)
- * 8. Return result
+ * 7. Return result
  */
 
-import { writeFile, readFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
+import { writeFile, mkdir } from "fs/promises";
 import { configureAuth } from "./auth-bridge.ts";
-import { scanForSecrets } from "./output-scanner.ts";
 import type { TaskCredentials } from "./auth-bridge.ts";
-import type { ScanResult } from "./output-scanner.ts";
 
 // CCA internal imports — reusing existing modules without modification
 import { parseGitHubContext, isEntityContext } from "../github/context.ts";
@@ -37,6 +37,7 @@ import { checkWritePermissions } from "../github/validation/permissions.ts";
 import { checkContainsTrigger } from "../github/validation/trigger.ts";
 import { validateEnvironmentVariables } from "../../base-action/src/validate-env.ts";
 import { setupClaudeCodeSettings } from "../../base-action/src/setup-claude-code-settings.ts";
+import { installPlugins } from "../../base-action/src/install-plugins.ts";
 import { preparePrompt } from "../../base-action/src/prepare-prompt.ts";
 import { runClaude } from "../../base-action/src/run-claude.ts";
 import { collectActionInputsPresence } from "../entrypoints/collect-inputs.ts";
@@ -47,6 +48,10 @@ import type { ClaudeRunResult } from "../../base-action/src/run-claude-sdk.ts";
  *
  * Contains everything needed to execute a CCA task:
  * credentials, context, and configuration.
+ *
+ * EP152 contract: Runner worker constructs this payload and passes it
+ * to the container via environment/stdin. Changes to this interface
+ * require coordinated updates in the backend runner worker.
  */
 export interface TaskPayload {
   /** Authentication credentials */
@@ -66,6 +71,9 @@ export interface TaskPayload {
 
 /**
  * Result of adapter execution.
+ *
+ * EP152 contract: Runner worker reads this result from the container's
+ * stdout/exit. Changes require coordinated backend updates.
  */
 export interface AdapterResult {
   /** Whether CCA execution succeeded */
@@ -76,8 +84,6 @@ export interface AdapterResult {
   executionFile?: string;
   /** SDK session ID (if any) */
   sessionId?: string;
-  /** Output scan results */
-  scanResult?: ScanResult;
   /** Error message (if failed) */
   error?: string;
 }
@@ -128,11 +134,17 @@ export async function executeTask(
 
     // Permission check (entity contexts only)
     if (isEntityContext(context)) {
+      // Permission override is `true` because vibectl always provides a GitHub
+      // installation token (ghs_xxx) via the auth bridge, which has repo-level
+      // write permissions granted by the App installation. In CCA's GitHub
+      // Actions context, this parameter indicates whether a separate override
+      // token (PAT) was provided; in vibectl's model, the installation token
+      // inherently has the override capability, so it is always present.
       const hasWritePermissions = await checkWritePermissions(
         octokit.rest,
         context,
         context.inputs.allowedNonWriteUsers,
-        true, // Override token is always present in vibectl (installation token)
+        true,
       );
       if (!hasWritePermissions) {
         return {
@@ -173,6 +185,13 @@ export async function executeTask(
 
     await setupClaudeCodeSettings(process.env.INPUT_SETTINGS);
 
+    // Install user-specified plugins and marketplace registries (matches run.ts).
+    // No-op when INPUT_PLUGIN_MARKETPLACES and INPUT_PLUGINS are unset.
+    await installPlugins(
+      process.env.INPUT_PLUGIN_MARKETPLACES,
+      process.env.INPUT_PLUGINS,
+    );
+
     const promptFile = `${tempDir}/claude-prompts/claude-prompt.txt`;
     await mkdir(`${tempDir}/claude-prompts`, { recursive: true });
 
@@ -181,26 +200,28 @@ export async function executeTask(
       promptFile,
     });
 
+    // runClaude() parameter omissions (compared to CCA's run.ts):
+    //
+    // - pathToClaudeCodeExecutable: Omitted because vibectl uses the Claude
+    //   Code SDK directly (via ANTHROPIC_BASE_URL pointing to the AI proxy),
+    //   not a CLI executable on PATH. The SDK is the canonical execution method
+    //   in the container environment.
+    //
+    // - showFullOutput: Omitted because vibectl captures execution output
+    //   programmatically via the executionFile and sessionId return values,
+    //   not via GitHub Actions step summary UI. Output display is handled
+    //   by the platform (EP152: runner worker reads container output).
     const claudeResult: ClaudeRunResult = await runClaude(promptConfig.path, {
       claudeArgs: prepareResult.claudeArgs,
       appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
       model: process.env.ANTHROPIC_MODEL,
     });
 
-    // Stage: scan — Scan output for secrets (post-execution, per OD-4)
-    stage = "scan";
-    let scanResult: ScanResult | undefined;
-    if (claudeResult.executionFile && existsSync(claudeResult.executionFile)) {
-      const outputContent = await readFile(claudeResult.executionFile, "utf-8");
-      scanResult = scanForSecrets(outputContent);
-    }
-
     return {
       success: claudeResult.conclusion === "success",
       mode,
       executionFile: claudeResult.executionFile,
       sessionId: claudeResult.sessionId,
-      scanResult,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

@@ -7,9 +7,17 @@
  */
 
 /**
- * Claude App bot user ID — configurable via BOT_USER_ID env var
+ * Claude App bot user ID — configurable via BOT_USER_ID env var.
+ *
+ * Guards against NaN propagation: if BOT_USER_ID is set but non-numeric
+ * (e.g., empty string, typo), falls back to CCA's default bot ID rather
+ * than silently producing NaN, which would break comment filtering and
+ * actor detection throughout the codebase.
  */
-export const CLAUDE_APP_BOT_ID = Number(process.env.BOT_USER_ID ?? "41898282");
+const parsedBotId = Number(process.env.BOT_USER_ID ?? "41898282");
+export const CLAUDE_APP_BOT_ID = Number.isNaN(parsedBotId)
+  ? 41898282
+  : parsedBotId;
 
 /**
  * Claude bot username — configurable via BOT_LOGIN env var

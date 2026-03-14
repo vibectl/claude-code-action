@@ -9,6 +9,12 @@ import type { TaskPayload } from "../../../src/vibectl/entry-adapter.ts";
  * These tests verify the adapter's orchestration logic by mocking
  * CCA's internal functions. The adapter composes CCA internals —
  * individual CCA function behavior is tested by CCA's own test suite.
+ *
+ * NOTE: This file lives in test/vibectl/mocked/ because Bun's mock.module()
+ * caches mocked modules per-process. Isolating mock.module() tests in a
+ * separate directory prevents cache pollution with non-mocked test files.
+ * As the test suite grows, monitor for cross-test interference if new
+ * mock.module() tests are added.
  */
 
 // Define mock functions

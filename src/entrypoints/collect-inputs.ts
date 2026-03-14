@@ -37,8 +37,21 @@ export function collectActionInputsPresence(): string {
     if (configPath) {
       try {
         allInputsJson = readFileSync(configPath, "utf-8");
-      } catch {
-        // Config file not found or unreadable
+      } catch (err: unknown) {
+        // Distinguish expected failures (file not found) from unexpected errors
+        // (permissions, disk errors). Expected: ENOENT when config file doesn't
+        // exist yet. Unexpected: EACCES, EIO, etc. — log a warning so operators
+        // can diagnose without failing the task.
+        const isExpected =
+          err instanceof Error &&
+          "code" in err &&
+          (err as NodeJS.ErrnoException).code === "ENOENT";
+        if (!isExpected) {
+          console.warn(
+            `[collect-inputs] Unexpected error reading VIBECTL_TASK_CONFIG (${configPath}):`,
+            err,
+          );
+        }
       }
     }
   }
