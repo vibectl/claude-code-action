@@ -29,11 +29,13 @@ interface TaskSubmissionResponse {
 }
 
 interface TaskStatusResponse {
-  id: string;
+  task_id: string;
   status: string;
-  result?: {
-    stdout?: string;
-    exit_code?: number;
+  result_data?: {
+    claude_output?: {
+      result?: string;
+      is_error?: boolean;
+    };
   };
   error?: string;
 }
@@ -238,7 +240,10 @@ async function main(): Promise<void> {
     `[integration-test] Task status: ${JSON.stringify(taskStatus, null, 2)}`,
   );
 
-  assert(taskStatus.id === taskId, "task status id should match submitted id");
+  assert(
+    taskStatus.task_id === taskId,
+    "task status task_id should match submitted id",
+  );
   console.log("[integration-test] PASS: task status id matches");
 
   assert(
