@@ -74,7 +74,24 @@ if (import.meta.main) {
       };
     }
 
-    process.stdout.write(JSON.stringify(result));
-    process.exit(result.success ? 0 : 1);
+    // Write result JSON and add explicit newline delimiter so the runner's
+    // backward line-scan in parseAdapterResult() always sees the result as a
+    // complete, standalone line — even when prior console.log/core.info output
+    // from CCA or @actions/core shares stdout.
+    const json = JSON.stringify(result) + "\n";
+
+    // Flush stdout before exiting.  process.exit() can terminate before the
+    // write buffer drains (observed in container sandbox pipes), which would
+    // cause the runner to see empty or truncated stdout.  Writing into a
+    // callback guarantees the kernel buffer has accepted the data before we
+    // set the exit code.  If the write itself errors we still exit to avoid
+    // the process hanging.
+    process.stdout.write(json, () => {
+      process.exit(result.success ? 0 : 1);
+    });
+
+    // Safety: if the callback is never invoked (e.g., broken pipe), exit
+    // after a generous grace period so the container is not left alive.
+    setTimeout(() => process.exit(result.success ? 0 : 1), 5000);
   })();
 }
