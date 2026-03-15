@@ -80,10 +80,11 @@ export async function configureAuth(
   // a concern because the runner worker constructs these headers server-side.
   const headerEntries = Object.entries(credentials.proxyHeaders);
   if (headerEntries.length > 0) {
-    // Claude Code SDK reads ANTHROPIC_CUSTOM_HEADERS as JSON
-    process.env.ANTHROPIC_CUSTOM_HEADERS = JSON.stringify(
-      credentials.proxyHeaders,
-    );
+    // ANTHROPIC_CUSTOM_HEADERS format: "Name: Value" (per Claude Code docs)
+    // Multiple headers separated by newlines.
+    process.env.ANTHROPIC_CUSTOM_HEADERS = headerEntries
+      .map(([name, value]) => `${name}: ${value}`)
+      .join("\n");
   }
 
   // Bot identity — read by constants.ts (Phase 2 patch)

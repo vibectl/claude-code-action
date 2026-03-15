@@ -46,10 +46,11 @@ describe("auth-bridge", () => {
       );
     });
 
-    test("sets ANTHROPIC_CUSTOM_HEADERS from proxy headers", async () => {
+    test("sets ANTHROPIC_CUSTOM_HEADERS in Name: Value format", async () => {
       await configureAuth(testCredentials);
-      const headers = JSON.parse(process.env.ANTHROPIC_CUSTOM_HEADERS || "{}");
-      expect(headers["X-Proxy-Token"]).toBe("hmac-signed-token-value");
+      expect(process.env.ANTHROPIC_CUSTOM_HEADERS).toBe(
+        "X-Proxy-Token: hmac-signed-token-value",
+      );
     });
 
     test("sets bot identity env vars", async () => {
@@ -119,6 +120,27 @@ describe("auth-bridge", () => {
       process.env.GITHUB_SERVER_URL = "https://github.example.com";
       await configureAuth(testCredentials);
       expect(process.env.GITHUB_SERVER_URL).toBe("https://github.example.com");
+    });
+
+    test("formats multiple proxy headers with newline separation", async () => {
+      await configureAuth({
+        ...testCredentials,
+        proxyHeaders: {
+          "X-Proxy-Token": "token-value",
+          "X-Egress-Mode": "full",
+        },
+      });
+      expect(process.env.ANTHROPIC_CUSTOM_HEADERS).toBe(
+        "X-Proxy-Token: token-value\nX-Egress-Mode: full",
+      );
+    });
+
+    test("ANTHROPIC_CUSTOM_HEADERS is not JSON format", async () => {
+      await configureAuth(testCredentials);
+      const value = process.env.ANTHROPIC_CUSTOM_HEADERS!;
+      expect(() => JSON.parse(value)).toThrow();
+      expect(value).not.toContain("{");
+      expect(value).not.toContain("}");
     });
 
     test("does not set ANTHROPIC_CUSTOM_HEADERS when no proxy headers", async () => {
