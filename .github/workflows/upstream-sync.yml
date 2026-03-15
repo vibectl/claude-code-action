@@ -67,10 +67,10 @@ jobs:
           git config user.name "vibectl-bot"
           git config user.email "bot@vibectl.dev"
 
-      - name: Fetch upstream
+      - name: Fetch upstream (no tags — vibectl owns its tag namespace)
         run: |
           git remote add upstream https://github.com/anthropics/claude-code-action.git 2>/dev/null || true
-          git fetch upstream main --quiet
+          git fetch upstream main --quiet --no-tags
 
       - name: Determine mode
         id: mode
