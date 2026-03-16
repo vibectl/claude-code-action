@@ -78,7 +78,9 @@ if (import.meta.main) {
     // backward line-scan in parseAdapterResult() always sees the result as a
     // complete, standalone line — even when prior console.log/core.info output
     // from CCA or @actions/core shares stdout.
-    const json = JSON.stringify(result) + "\n";
+    // Leading newline ensures the JSON starts on its own line even if
+    // prior console output didn't end with a newline.
+    const json = "\n" + JSON.stringify(result) + "\n";
 
     // Flush stdout before exiting.  process.exit() can terminate before the
     // write buffer drains (observed in container sandbox pipes), which would
