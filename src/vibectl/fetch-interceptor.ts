@@ -9,6 +9,12 @@
  * be sent to any host other than the configured proxy URL. URL matching
  * uses startsWith on the full URL (scheme + host + path prefix) to
  * prevent token leakage to similar-looking domains.
+ *
+ * Scope limitation: HTTP redirect responses (301/302/307/308) are not
+ * intercepted. The browser/runtime follows redirects natively, and the
+ * proxy headers are not re-injected on the redirected request. This is
+ * acceptable for current CCA usage — GitHub REST/GraphQL APIs and the
+ * egress proxy return direct responses, not redirects.
  */
 
 export interface FetchInterceptorConfig {

@@ -13,6 +13,25 @@
  * Error handling: Invalid/missing payloads produce structured error
  * JSON on stdout (never unhandled exceptions). This ensures the
  * runner worker always receives parseable output.
+ *
+ * CRITICAL INVARIANT — Cross-Repository Stdout Contract
+ *
+ * The backend runner worker (cca-result.ts) parses this file's stdout
+ * to extract the AdapterResult JSON. The following invariants MUST hold:
+ *
+ *   1. The AdapterResult JSON MUST be the last non-empty line of stdout.
+ *      It is written via: console.log("\n" + JSON.stringify(result))
+ *   2. The JSON MUST contain a top-level "success" boolean field.
+ *   3. NO code path may write to stdout after the result JSON line.
+ *      Any console.log/console.error BEFORE the result is tolerated
+ *      (the parser scans backward from the last line).
+ *   4. process.exit() MUST follow immediately after the result output.
+ *
+ * The backend parser (cca-result.ts) scans stdout lines bottom-to-top,
+ * looking for '{"success"' to locate the result JSON. Breaking these
+ * invariants will cause task result parsing failures in production.
+ *
+ * See: backend/workers/runner/src/execution/cca-result.ts
  */
 
 import { executeTask } from "./entry-adapter.ts";

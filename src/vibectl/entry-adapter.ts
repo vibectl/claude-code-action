@@ -22,7 +22,7 @@
  * 7. Return result
  */
 
-import { writeFile, mkdir } from "fs/promises";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { configureAuth } from "./auth-bridge.ts";
 import type { TaskCredentials } from "./auth-bridge.ts";
 
@@ -70,9 +70,27 @@ export interface TaskPayload {
 }
 
 /**
+ * Execution metrics from the Claude Agent SDK.
+ *
+ * Extracted from SDKResultMessage after CCA execution completes.
+ * All fields optional — metrics may be absent if execution fails
+ * before the SDK produces a result message.
+ */
+export interface AdapterMetrics {
+  /** Number of conversation turns used */
+  numTurns?: number;
+  /** Total cost in USD */
+  totalCostUsd?: number;
+  /** Execution duration in milliseconds (SDK-measured) */
+  durationMs?: number;
+  /** Count of permission denial events during execution */
+  permissionDenialsCount?: number;
+}
+
+/**
  * Result of adapter execution.
  *
- * EP152 contract: Runner worker reads this result from the container's
+ * Contract: Runner worker reads this result from the container's
  * stdout/exit. Changes require coordinated backend updates.
  */
 export interface AdapterResult {
@@ -86,6 +104,62 @@ export interface AdapterResult {
   sessionId?: string;
   /** Error message (if failed) */
   error?: string;
+  /** Execution metrics from the Claude Agent SDK (present on successful execution) */
+  metrics?: AdapterMetrics;
+}
+
+/**
+ * Extract execution metrics from the SDK execution file.
+ *
+ * The upstream runClaudeWithSdk() writes all SDK messages to an execution
+ * file as a JSON array. The result message (type: "result") contains
+ * metrics that are logged to console but not returned in ClaudeRunResult.
+ * This function reads the execution file and extracts those metrics
+ * without modifying any upstream files.
+ *
+ * @param executionFile - Path to the SDK execution output file
+ * @returns Extracted metrics, or undefined if extraction fails
+ */
+async function extractMetricsFromExecutionFile(
+  executionFile: string,
+): Promise<AdapterMetrics | undefined> {
+  try {
+    const content = await readFile(executionFile, "utf-8");
+    const messages: unknown[] = JSON.parse(content);
+
+    // Find the result message (last message with type "result")
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (
+        typeof msg === "object" &&
+        msg !== null &&
+        "type" in msg &&
+        (msg as Record<string, unknown>).type === "result"
+      ) {
+        const resultMsg = msg as Record<string, unknown>;
+        const metrics: AdapterMetrics = {};
+
+        if (typeof resultMsg.num_turns === "number") {
+          metrics.numTurns = resultMsg.num_turns;
+        }
+        if (typeof resultMsg.total_cost_usd === "number") {
+          metrics.totalCostUsd = resultMsg.total_cost_usd;
+        }
+        if (typeof resultMsg.duration_ms === "number") {
+          metrics.durationMs = resultMsg.duration_ms;
+        }
+        if (Array.isArray(resultMsg.permission_denials)) {
+          metrics.permissionDenialsCount = resultMsg.permission_denials.length;
+        }
+
+        return metrics;
+      }
+    }
+    return undefined;
+  } catch {
+    // Execution file may not exist or be unreadable — metrics are optional
+    return undefined;
+  }
 }
 
 /**
@@ -217,11 +291,19 @@ export async function executeTask(
       model: process.env.ANTHROPIC_MODEL,
     });
 
+    // Extract execution metrics from the SDK execution file.
+    // The upstream SDK writes all messages to this file; we read back the
+    // result message to capture metrics without modifying upstream files.
+    const metrics = claudeResult.executionFile
+      ? await extractMetricsFromExecutionFile(claudeResult.executionFile)
+      : undefined;
+
     return {
       success: claudeResult.conclusion === "success",
       mode,
       executionFile: claudeResult.executionFile,
       sessionId: claudeResult.sessionId,
+      metrics,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
