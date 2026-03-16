@@ -74,26 +74,13 @@ if (import.meta.main) {
       };
     }
 
-    // Write result JSON and add explicit newline delimiter so the runner's
-    // backward line-scan in parseAdapterResult() always sees the result as a
-    // complete, standalone line — even when prior console.log/core.info output
-    // from CCA or @actions/core shares stdout.
-    // Leading newline ensures the JSON starts on its own line even if
+    // Write result JSON to stdout using console.log for reliable synchronous
+    // output. process.stdout.write() with callback is unreliable in Bun
+    // (callback may never fire, and process.exit() doesn't flush buffers).
+    // console.log adds a trailing newline and flushes synchronously.
+    // The leading newline ensures the JSON starts on its own line even if
     // prior console output didn't end with a newline.
-    const json = "\n" + JSON.stringify(result) + "\n";
-
-    // Flush stdout before exiting.  process.exit() can terminate before the
-    // write buffer drains (observed in container sandbox pipes), which would
-    // cause the runner to see empty or truncated stdout.  Writing into a
-    // callback guarantees the kernel buffer has accepted the data before we
-    // set the exit code.  If the write itself errors we still exit to avoid
-    // the process hanging.
-    process.stdout.write(json, () => {
-      process.exit(result.success ? 0 : 1);
-    });
-
-    // Safety: if the callback is never invoked (e.g., broken pipe), exit
-    // after a generous grace period so the container is not left alive.
-    setTimeout(() => process.exit(result.success ? 0 : 1), 5000);
+    console.log("\n" + JSON.stringify(result));
+    process.exit(result.success ? 0 : 1);
   })();
 }
