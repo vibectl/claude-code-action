@@ -12,18 +12,27 @@
  * (queue -> container -> AI proxy) by recomposing CCA's orchestration
  * through direct imports rather than modifying CCA's entry points.
  *
- * Execution flow:
- * 1. Parse task payload from environment
- * 2. Configure auth (auth-bridge)
- * 3. Construct GitHub context (Phase 2 patch: VIBECTL_CONTEXT_JSON)
- * 4. Detect mode (tag/agent)
- * 5. Invoke CCA prepare (tag or agent mode)
- * 6. Invoke CCA run (SDK execution)
- * 7. Return result
+ * Two execution paths:
+ *
+ * Webhook-triggered (contextJson present):
+ *   1. Parse task payload from environment
+ *   2. Configure auth (auth-bridge: GitHub + AI proxy)
+ *   3. Construct GitHub context (VIBECTL_CONTEXT_JSON)
+ *   4. Detect mode (tag/agent)
+ *   5. Invoke CCA prepare (tag or agent mode)
+ *   6. Invoke CCA run (SDK execution)
+ *   7. Return result
+ *
+ * Prompt-only (contextJson absent):
+ *   1. Parse task payload from environment
+ *   2. Configure auth (prompt-only: AI proxy only)
+ *   3. Write prompt to file
+ *   4. Invoke CCA run (SDK execution)
+ *   5. Return result
  */
 
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { configureAuth } from "./auth-bridge.ts";
+import { configureAuth, configurePromptOnlyAuth } from "./auth-bridge.ts";
 import type { TaskCredentials } from "./auth-bridge.ts";
 
 // CCA internal imports — reusing existing modules without modification
@@ -56,8 +65,12 @@ import type { ClaudeRunResult } from "../../base-action/src/run-claude-sdk.ts";
 export interface TaskPayload {
   /** Authentication credentials */
   credentials: TaskCredentials;
-  /** GitHub context JSON (sets VIBECTL_CONTEXT_JSON) */
-  contextJson: {
+  /**
+   * GitHub context JSON (sets VIBECTL_CONTEXT_JSON).
+   * Optional — when absent, the adapter uses prompt-only execution
+   * which bypasses all GitHub API calls and webhook processing.
+   */
+  contextJson?: {
     eventName: string;
     payload: Record<string, unknown>;
     repo: { owner: string; repo: string };
@@ -65,7 +78,7 @@ export interface TaskPayload {
   };
   /** Task configuration inputs (written to VIBECTL_TASK_CONFIG file) */
   taskConfig?: Record<string, string>;
-  /** Custom prompt (optional — tag mode uses auto-generated prompt) */
+  /** Custom prompt (optional for webhook mode, required for prompt-only mode) */
   prompt?: string;
 }
 
@@ -163,15 +176,108 @@ async function extractMetricsFromExecutionFile(
 }
 
 /**
+ * Prompt-only execution path.
+ *
+ * Bypasses all GitHub-specific logic (context parsing, mode detection,
+ * permission checks, actor validation) and goes directly to the Agent
+ * SDK with a plain prompt. No Octokit is created, no GitHub API calls
+ * are made, and no webhook payload structures are needed.
+ *
+ * @param payload - Task payload with prompt but no contextJson
+ * @returns AdapterResult with mode "agent"
+ */
+async function executePromptOnly(
+  payload: TaskPayload,
+): Promise<AdapterResult> {
+  let stage = "init";
+
+  try {
+    // Validate prompt presence — required for prompt-only mode
+    if (!payload.prompt || payload.prompt.trim().length === 0) {
+      return {
+        success: false,
+        mode: "agent",
+        error: "[prepare] prompt is required for prompt-only execution (no contextJson provided)",
+      };
+    }
+
+    // Stage: auth — Configure minimal environment (AI proxy only, no GitHub)
+    stage = "auth";
+    const { tempDir } = await configurePromptOnlyAuth(payload.credentials);
+
+    // Write task config if provided
+    if (payload.taskConfig) {
+      const configPath = `${tempDir}/task-config.json`;
+      await writeFile(configPath, JSON.stringify(payload.taskConfig));
+      process.env.VIBECTL_TASK_CONFIG = configPath;
+    }
+
+    // Stage: execute — Run Claude via Agent SDK with prompt
+    stage = "execute";
+    process.env.CLAUDE_CODE_ACTION = "1";
+
+    validateEnvironmentVariables();
+
+    await setupClaudeCodeSettings(process.env.INPUT_SETTINGS);
+
+    await installPlugins(
+      process.env.INPUT_PLUGIN_MARKETPLACES,
+      process.env.INPUT_PLUGINS,
+    );
+
+    // Write prompt to file for the SDK
+    const promptDir = `${tempDir}/claude-prompts`;
+    await mkdir(promptDir, { recursive: true });
+    const promptFile = `${promptDir}/claude-prompt.txt`;
+    await writeFile(promptFile, payload.prompt);
+
+    const promptConfig = await preparePrompt({
+      prompt: "",
+      promptFile,
+    });
+
+    const claudeResult: ClaudeRunResult = await runClaude(promptConfig.path, {
+      appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
+      model: process.env.ANTHROPIC_MODEL,
+    });
+
+    const metrics = claudeResult.executionFile
+      ? await extractMetricsFromExecutionFile(claudeResult.executionFile)
+      : undefined;
+
+    return {
+      success: claudeResult.conclusion === "success",
+      mode: "agent",
+      executionFile: claudeResult.executionFile,
+      sessionId: claudeResult.sessionId,
+      metrics,
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      mode: "agent",
+      error: `[${stage}] ${detail}`,
+    };
+  }
+}
+
+/**
  * Execute a CCA task from a vibectl task payload.
  *
  * This is the primary entry point for container-based CCA execution.
- * It orchestrates the same CCA internal functions that run.ts calls,
- * but with vibectl's auth model and lifecycle.
+ * Routes to either prompt-only execution (no GitHub context) or
+ * webhook-triggered execution (full GitHub flow).
  */
 export async function executeTask(
   payload: TaskPayload,
 ): Promise<AdapterResult> {
+  // Route: prompt-only execution when no contextJson is provided
+  if (!payload.contextJson) {
+    return executePromptOnly(payload);
+  }
+
+  // Route: webhook-triggered execution with full GitHub context
   let context: GitHubContext | undefined;
   let mode: "tag" | "agent" = "agent";
   let stage = "init";
@@ -203,7 +309,7 @@ export async function executeTask(
     context = parseGitHubContext();
     mode = detectMode(context);
 
-    const githubToken = payload.credentials.githubToken;
+    const githubToken = payload.credentials.githubToken!;
     const octokit = createOctokit(githubToken);
 
     // Permission check (entity contexts only)

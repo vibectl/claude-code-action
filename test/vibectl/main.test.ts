@@ -132,4 +132,37 @@ describe("main CLI parsePayload", () => {
     );
     expect((result as any).credentials.egressMode).toBe("relay");
   });
+
+  test("parses prompt-only payload (no contextJson)", () => {
+    const promptOnlyPayload = {
+      credentials: {
+        aiProxyUrl: "https://proxy.test",
+        proxyHeaders: { "X-Proxy-Token": "hmac-token" },
+      },
+      prompt: "Analyze the codebase",
+    };
+    process.env.VIBECTL_TASK_PAYLOAD = JSON.stringify(promptOnlyPayload);
+    const result = parsePayload();
+
+    expect("credentials" in result).toBe(true);
+    expect((result as any).credentials.aiProxyUrl).toBe("https://proxy.test");
+    expect((result as any).prompt).toBe("Analyze the codebase");
+    expect((result as any).contextJson).toBeUndefined();
+  });
+
+  test("prompt-only payload is not treated as an error result", () => {
+    const promptOnlyPayload = {
+      credentials: {
+        aiProxyUrl: "https://proxy.test",
+        proxyHeaders: {},
+      },
+      prompt: "Run analysis",
+    };
+    process.env.VIBECTL_TASK_PAYLOAD = JSON.stringify(promptOnlyPayload);
+    const result = parsePayload();
+
+    // Should NOT have "success" field (that would indicate an error result)
+    expect("success" in result).toBe(false);
+    expect("credentials" in result).toBe(true);
+  });
 });

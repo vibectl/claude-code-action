@@ -2,7 +2,7 @@
 // @ts-nocheck — test file uses flexible mock assertions
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { existsSync, readFileSync } from "fs";
-import { configureAuth } from "../../src/vibectl/auth-bridge.ts";
+import { configureAuth, configurePromptOnlyAuth } from "../../src/vibectl/auth-bridge.ts";
 import type { TaskCredentials } from "../../src/vibectl/auth-bridge.ts";
 
 describe("auth-bridge", () => {
@@ -155,6 +155,108 @@ describe("auth-bridge", () => {
     test("sets GITHUB_WORKSPACE default", async () => {
       delete process.env.GITHUB_WORKSPACE;
       await configureAuth(testCredentials);
+      expect(process.env.GITHUB_WORKSPACE).toBe("/workspace");
+    });
+  });
+
+  describe("configurePromptOnlyAuth", () => {
+    const promptOnlyCredentials = {
+      aiProxyUrl: "https://ai-proxy.vibectl.dev/v1/proxy/cust_456",
+      proxyHeaders: { "X-Proxy-Token": "prompt-only-hmac" },
+    };
+
+    test("sets ANTHROPIC_BASE_URL to AI proxy", async () => {
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.ANTHROPIC_BASE_URL).toBe(
+        promptOnlyCredentials.aiProxyUrl,
+      );
+    });
+
+    test("sets ANTHROPIC_API_KEY to dummy value", async () => {
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.ANTHROPIC_API_KEY).toBe(
+        "dummy-key-replaced-by-ai-proxy",
+      );
+    });
+
+    test("sets ANTHROPIC_CUSTOM_HEADERS from proxy headers", async () => {
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.ANTHROPIC_CUSTOM_HEADERS).toBe(
+        "X-Proxy-Token: prompt-only-hmac",
+      );
+    });
+
+    test("does not set GITHUB_TOKEN", async () => {
+      delete process.env.GITHUB_TOKEN;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.GITHUB_TOKEN).toBeUndefined();
+    });
+
+    test("does not set GH_TOKEN", async () => {
+      delete process.env.GH_TOKEN;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.GH_TOKEN).toBeUndefined();
+    });
+
+    test("does not set BOT_USER_ID", async () => {
+      delete process.env.BOT_USER_ID;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.BOT_USER_ID).toBeUndefined();
+    });
+
+    test("does not set BOT_LOGIN", async () => {
+      delete process.env.BOT_LOGIN;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.BOT_LOGIN).toBeUndefined();
+    });
+
+    test("does not set GITHUB_EVENT_NAME", async () => {
+      delete process.env.GITHUB_EVENT_NAME;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.GITHUB_EVENT_NAME).toBeUndefined();
+    });
+
+    test("creates temp directory and returns its path", async () => {
+      const { tempDir } = await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(tempDir).toBeTruthy();
+      expect(existsSync(tempDir)).toBe(true);
+    });
+
+    test("sets RUNNER_TEMP to created temp directory", async () => {
+      const { tempDir } = await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.RUNNER_TEMP).toBe(tempDir);
+    });
+
+    test("creates GITHUB_OUTPUT file", async () => {
+      const { tempDir } = await configurePromptOnlyAuth(promptOnlyCredentials);
+      const outputFile = process.env.GITHUB_OUTPUT!;
+      expect(outputFile).toBe(`${tempDir}/github-output`);
+      expect(existsSync(outputFile)).toBe(true);
+    });
+
+    test("creates GITHUB_ENV file", async () => {
+      const { tempDir } = await configurePromptOnlyAuth(promptOnlyCredentials);
+      const envFile = process.env.GITHUB_ENV!;
+      expect(envFile).toBe(`${tempDir}/github-env`);
+      expect(existsSync(envFile)).toBe(true);
+    });
+
+    test("sets GITHUB_ACTION_PATH to default /opt/cca", async () => {
+      await configurePromptOnlyAuth(promptOnlyCredentials);
+      expect(process.env.GITHUB_ACTION_PATH).toBe("/opt/cca");
+    });
+
+    test("sets GITHUB_ACTION_PATH to custom path", async () => {
+      await configurePromptOnlyAuth({
+        ...promptOnlyCredentials,
+        ccaSourcePath: "/custom/path",
+      });
+      expect(process.env.GITHUB_ACTION_PATH).toBe("/custom/path");
+    });
+
+    test("sets GITHUB_WORKSPACE default", async () => {
+      delete process.env.GITHUB_WORKSPACE;
+      await configurePromptOnlyAuth(promptOnlyCredentials);
       expect(process.env.GITHUB_WORKSPACE).toBe("/workspace");
     });
   });
