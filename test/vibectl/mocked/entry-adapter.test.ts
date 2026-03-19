@@ -318,6 +318,16 @@ describe("entry-adapter", () => {
       expect(mockRunClaude).toHaveBeenCalled();
     });
 
+    test("appends permission bypass to mode-specific claudeArgs", async () => {
+      await executeTask(createTestPayload());
+      const callArgs = mockRunClaude.mock.calls[0];
+      const options = callArgs?.[1] as Record<string, unknown> | undefined;
+      expect(options?.claudeArgs).toContain("--permission-mode bypassPermissions");
+      expect(options?.claudeArgs).toContain("--dangerously-skip-permissions");
+      // Tag mode's acceptEdits should be present but overridden by bypassPermissions
+      expect(options?.claudeArgs).toContain("acceptEdits");
+    });
+
     test("returns success when Claude succeeds", async () => {
       mockRunClaude.mockImplementation(() =>
         Promise.resolve({

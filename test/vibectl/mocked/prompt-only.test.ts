@@ -190,6 +190,14 @@ describe("prompt-only execution", () => {
     expect(mockRunClaude).toHaveBeenCalledTimes(1);
   });
 
+  test("passes permission bypass args to runClaude", async () => {
+    await executeTask(createPromptOnlyPayload());
+    const callArgs = mockRunClaude.mock.calls[0];
+    const options = callArgs?.[1] as Record<string, unknown> | undefined;
+    expect(options?.claudeArgs).toContain("--permission-mode bypassPermissions");
+    expect(options?.claudeArgs).toContain("--dangerously-skip-permissions");
+  });
+
   test("does not call parseGitHubContext", async () => {
     await executeTask(createPromptOnlyPayload());
     expect(mockParseGitHubContext).not.toHaveBeenCalled();

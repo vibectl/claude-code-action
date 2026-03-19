@@ -239,6 +239,12 @@ async function executePromptOnly(
     const claudeResult: ClaudeRunResult = await runClaude(promptConfig.path, {
       appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
       model: process.env.ANTHROPIC_MODEL,
+      // vibectl containers are fully isolated (VM + non-root + restricted sudo +
+      // secret proxy pattern). Permission bypass enables Claude to execute bash
+      // commands, file operations, and other tools without interactive approval.
+      // Without this, the SDK blocks waiting for permission approval that never
+      // comes in a headless container environment.
+      claudeArgs: '--permission-mode bypassPermissions --dangerously-skip-permissions',
     });
 
     const metrics = claudeResult.executionFile
@@ -391,8 +397,15 @@ export async function executeTask(
     //   programmatically via the executionFile and sessionId return values,
     //   not via GitHub Actions step summary UI. Output display is handled
     //   by the platform (EP152: runner worker reads container output).
+    // Append permission bypass to whatever mode-specific args were set.
+    // vibectl containers are fully isolated (VM + non-root + restricted sudo +
+    // secret proxy pattern). Permission bypass enables Claude to execute all
+    // tools without interactive approval in the headless container environment.
+    // This overrides tag mode's acceptEdits with the more permissive bypassPermissions.
+    const vibeCtlClaudeArgs = `${prepareResult.claudeArgs} --permission-mode bypassPermissions --dangerously-skip-permissions`.trim();
+
     const claudeResult: ClaudeRunResult = await runClaude(promptConfig.path, {
-      claudeArgs: prepareResult.claudeArgs,
+      claudeArgs: vibeCtlClaudeArgs,
       appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
       model: process.env.ANTHROPIC_MODEL,
     });
