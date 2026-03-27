@@ -26,45 +26,60 @@ export function validateEnvironmentVariables() {
       );
     }
   } else if (useBedrock) {
-    const awsRegion = process.env.AWS_REGION;
-    const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-    const awsBearerToken = process.env.AWS_BEARER_TOKEN_BEDROCK;
+    const skipBedrockAuth =
+      process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH === "1";
 
-    // AWS_REGION is always required for Bedrock
-    if (!awsRegion) {
-      errors.push("AWS_REGION is required when using AWS Bedrock.");
-    }
+    if (!skipBedrockAuth) {
+      const awsRegion = process.env.AWS_REGION;
+      const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+      const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const awsBearerToken = process.env.AWS_BEARER_TOKEN_BEDROCK;
 
-    // Either bearer token OR access key credentials must be provided
-    const hasAccessKeyCredentials = awsAccessKeyId && awsSecretAccessKey;
-    const hasBearerToken = awsBearerToken;
+      // AWS_REGION is always required for Bedrock
+      if (!awsRegion) {
+        errors.push("AWS_REGION is required when using AWS Bedrock.");
+      }
 
-    if (!hasAccessKeyCredentials && !hasBearerToken) {
-      errors.push(
-        "Either AWS_BEARER_TOKEN_BEDROCK or both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required when using AWS Bedrock.",
-      );
+      // Either bearer token OR access key credentials must be provided
+      const hasAccessKeyCredentials = awsAccessKeyId && awsSecretAccessKey;
+      const hasBearerToken = awsBearerToken;
+
+      if (!hasAccessKeyCredentials && !hasBearerToken) {
+        errors.push(
+          "Either AWS_BEARER_TOKEN_BEDROCK or both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required when using AWS Bedrock.",
+        );
+      }
     }
   } else if (useVertex) {
-    const requiredVertexVars = {
-      ANTHROPIC_VERTEX_PROJECT_ID: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
-      CLOUD_ML_REGION: process.env.CLOUD_ML_REGION,
-    };
+    const skipVertexAuth =
+      process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH === "1";
 
-    Object.entries(requiredVertexVars).forEach(([key, value]) => {
-      if (!value) {
-        errors.push(`${key} is required when using Google Vertex AI.`);
-      }
-    });
+    if (!skipVertexAuth) {
+      const requiredVertexVars = {
+        ANTHROPIC_VERTEX_PROJECT_ID: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
+        CLOUD_ML_REGION: process.env.CLOUD_ML_REGION,
+      };
+
+      Object.entries(requiredVertexVars).forEach(([key, value]) => {
+        if (!value) {
+          errors.push(`${key} is required when using Google Vertex AI.`);
+        }
+      });
+    }
   } else if (useFoundry) {
-    const foundryResource = process.env.ANTHROPIC_FOUNDRY_RESOURCE;
-    const foundryBaseUrl = process.env.ANTHROPIC_FOUNDRY_BASE_URL;
+    const skipFoundryAuth =
+      process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH === "1";
 
-    // Either resource name or base URL is required
-    if (!foundryResource && !foundryBaseUrl) {
-      errors.push(
-        "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
-      );
+    if (!skipFoundryAuth) {
+      const foundryResource = process.env.ANTHROPIC_FOUNDRY_RESOURCE;
+      const foundryBaseUrl = process.env.ANTHROPIC_FOUNDRY_BASE_URL;
+
+      // Either resource name or base URL is required
+      if (!foundryResource && !foundryBaseUrl) {
+        errors.push(
+          "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
+        );
+      }
     }
   }
 

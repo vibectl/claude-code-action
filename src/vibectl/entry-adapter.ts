@@ -239,12 +239,13 @@ async function executePromptOnly(
     const claudeResult: ClaudeRunResult = await runClaude(promptConfig.path, {
       appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
       model: process.env.ANTHROPIC_MODEL,
+      maxTurns: process.env.INPUT_MAX_TURNS,
       // vibectl containers are fully isolated (VM + non-root + restricted sudo +
       // secret proxy pattern). Permission bypass enables Claude to execute bash
       // commands, file operations, and other tools without interactive approval.
       // Without this, the SDK blocks waiting for permission approval that never
       // comes in a headless container environment.
-      claudeArgs: '--permission-mode bypassPermissions --dangerously-skip-permissions',
+      claudeArgs: `${process.env.CLAUDE_ARGS ?? ''} --permission-mode bypassPermissions --dangerously-skip-permissions`.trim(),
     });
 
     const metrics = claudeResult.executionFile
@@ -398,6 +399,11 @@ export async function executeTask(
     //   not via GitHub Actions step summary UI. Output display is handled
     //   by the platform (EP152: runner worker reads container output).
     // Append permission bypass to whatever mode-specific args were set.
+    // prepareResult.claudeArgs already includes customer cli_args because
+    // CCA's prepareTagMode/prepareAgentMode reads process.env.CLAUDE_ARGS
+    // (set by the runner worker) and merges it into prepareResult.claudeArgs.
+    // Platform invariants are always post-appended so that last-one-wins
+    // semantics ensure permission bypass cannot be overridden.
     // vibectl containers are fully isolated (VM + non-root + restricted sudo +
     // secret proxy pattern). Permission bypass enables Claude to execute all
     // tools without interactive approval in the headless container environment.
@@ -408,6 +414,7 @@ export async function executeTask(
       claudeArgs: vibeCtlClaudeArgs,
       appendSystemPrompt: process.env.APPEND_SYSTEM_PROMPT,
       model: process.env.ANTHROPIC_MODEL,
+      maxTurns: process.env.INPUT_MAX_TURNS,
     });
 
     // Extract execution metrics from the SDK execution file.

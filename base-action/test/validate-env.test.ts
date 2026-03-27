@@ -26,6 +26,9 @@ describe("validateEnvironmentVariables", () => {
     delete process.env.ANTHROPIC_VERTEX_BASE_URL;
     delete process.env.ANTHROPIC_FOUNDRY_RESOURCE;
     delete process.env.ANTHROPIC_FOUNDRY_BASE_URL;
+    delete process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH;
+    delete process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH;
+    delete process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH;
   });
 
   afterEach(() => {
@@ -245,6 +248,116 @@ describe("validateEnvironmentVariables", () => {
       expect(() => validateEnvironmentVariables()).toThrow(
         "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
       );
+    });
+  });
+
+  describe("SKIP_AUTH flags", () => {
+    describe("Bedrock SKIP_AUTH", () => {
+      test("should pass when SKIP_BEDROCK_AUTH is set without any AWS credentials", () => {
+        process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+        process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH = "1";
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should pass when SKIP_BEDROCK_AUTH is set without AWS_REGION", () => {
+        process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+        process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH = "1";
+        // No AWS_REGION, no credentials — all skipped
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should still enforce credentials when SKIP_BEDROCK_AUTH is not set", () => {
+        process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+        // CLAUDE_CODE_SKIP_BEDROCK_AUTH not set
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "AWS_REGION is required when using AWS Bedrock.",
+        );
+      });
+
+      test("should still enforce credentials when SKIP_BEDROCK_AUTH is not '1'", () => {
+        process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+        process.env.CLAUDE_CODE_SKIP_BEDROCK_AUTH = "true";
+        // Only "1" is accepted, not "true"
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "AWS_REGION is required when using AWS Bedrock.",
+        );
+      });
+    });
+
+    describe("Vertex SKIP_AUTH", () => {
+      test("should pass when SKIP_VERTEX_AUTH is set without any GCP credentials", () => {
+        process.env.CLAUDE_CODE_USE_VERTEX = "1";
+        process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH = "1";
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should pass when SKIP_VERTEX_AUTH is set without project ID or region", () => {
+        process.env.CLAUDE_CODE_USE_VERTEX = "1";
+        process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH = "1";
+        // No ANTHROPIC_VERTEX_PROJECT_ID, no CLOUD_ML_REGION — all skipped
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should still enforce credentials when SKIP_VERTEX_AUTH is not set", () => {
+        process.env.CLAUDE_CODE_USE_VERTEX = "1";
+        // CLAUDE_CODE_SKIP_VERTEX_AUTH not set
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "ANTHROPIC_VERTEX_PROJECT_ID is required when using Google Vertex AI.",
+        );
+      });
+
+      test("should still enforce credentials when SKIP_VERTEX_AUTH is not '1'", () => {
+        process.env.CLAUDE_CODE_USE_VERTEX = "1";
+        process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH = "yes";
+        // Only "1" is accepted, not "yes"
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "ANTHROPIC_VERTEX_PROJECT_ID is required when using Google Vertex AI.",
+        );
+      });
+    });
+
+    describe("Foundry SKIP_AUTH", () => {
+      test("should pass when SKIP_FOUNDRY_AUTH is set without any Azure credentials", () => {
+        process.env.CLAUDE_CODE_USE_FOUNDRY = "1";
+        process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH = "1";
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should pass when SKIP_FOUNDRY_AUTH is set without resource or base URL", () => {
+        process.env.CLAUDE_CODE_USE_FOUNDRY = "1";
+        process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH = "1";
+        // No ANTHROPIC_FOUNDRY_RESOURCE, no ANTHROPIC_FOUNDRY_BASE_URL — all skipped
+
+        expect(() => validateEnvironmentVariables()).not.toThrow();
+      });
+
+      test("should still enforce credentials when SKIP_FOUNDRY_AUTH is not set", () => {
+        process.env.CLAUDE_CODE_USE_FOUNDRY = "1";
+        // CLAUDE_CODE_SKIP_FOUNDRY_AUTH not set
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
+        );
+      });
+
+      test("should still enforce credentials when SKIP_FOUNDRY_AUTH is not '1'", () => {
+        process.env.CLAUDE_CODE_USE_FOUNDRY = "1";
+        process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH = "0";
+        // Only "1" is accepted, not "0"
+
+        expect(() => validateEnvironmentVariables()).toThrow(
+          "Either ANTHROPIC_FOUNDRY_RESOURCE or ANTHROPIC_FOUNDRY_BASE_URL is required when using Microsoft Foundry.",
+        );
+      });
     });
   });
 
